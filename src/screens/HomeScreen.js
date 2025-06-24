@@ -16,7 +16,7 @@ import { useNavigation } from '@react-navigation/native';
 // import { useSupabaseFriendStore as useFriendStore } from '../stores/supabaseFriendStore';
 
 export default function HomeScreen({ navigation }) {
-  const { user } = useAuthStore();
+  const { user, signOut } = useAuthStore();
   const { currentTheme } = useThemeStore();
   const parentNavigation = useNavigation();
   // Mock data for now
@@ -65,9 +65,36 @@ export default function HomeScreen({ navigation }) {
   const handleSearchPress = () => {
     console.log('🏠 HomeScreen: Search button pressed');
     Alert.alert(
-      'Search',
-      'Search functionality coming soon!',
-      [{ text: 'OK' }]
+      'Quick Actions',
+      'Choose an action:',
+      [
+        { text: 'Search Users', onPress: () => Alert.alert('Search', 'Search functionality coming soon!') },
+        { text: 'Switch User', onPress: handleLogout },
+        { text: 'Cancel', style: 'cancel' }
+      ]
+    );
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Switch User',
+      'Sign out to test with different accounts?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Sign Out', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await signOut();
+              console.log('🏠 HomeScreen: User signed out for testing');
+            } catch (error) {
+              console.error('🏠 HomeScreen: Logout error:', error);
+              Alert.alert('Error', 'Failed to sign out. Please try again.');
+            }
+          }
+        }
+      ]
     );
   };
 

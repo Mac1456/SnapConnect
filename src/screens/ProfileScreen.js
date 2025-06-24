@@ -23,10 +23,10 @@ export default function ProfileScreen({ navigation }) {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [locationEnabled, setLocationEnabled] = useState(true);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
-  const [editDisplayName, setEditDisplayName] = useState(user?.displayName || '');
+  const [editDisplayName, setEditDisplayName] = useState(user?.display_name || user?.displayName || '');
   const [editEmail, setEditEmail] = useState(user?.email || '');
-  const [editBio, setEditBio] = useState(user?.bio || '');
-  const [profileImage, setProfileImage] = useState(user?.profileImage || null);
+  const [editBio, setEditBio] = useState(user?.bio || user?.display_bio || '');
+  const [profileImage, setProfileImage] = useState(user?.profile_picture || user?.profileImage || null);
 
   const handleLogout = () => {
     Alert.alert(
@@ -192,11 +192,11 @@ export default function ProfileScreen({ navigation }) {
                 </View>
               </TouchableOpacity>
               <Text style={{ color: currentTheme.colors.text }} className="text-2xl font-bold drop-shadow-lg">
-                {user?.displayName || 'SnapConnect User'}
+                {user?.display_name || user?.displayName || 'SnapConnect User'}
               </Text>
-              {user?.bio && (
+              {(user?.bio || user?.display_bio) && (
                 <Text style={{ color: currentTheme.colors.textTertiary }} className="text-center mt-2 px-4">
-                  {user.bio}
+                  {user?.bio || user?.display_bio}
                 </Text>
               )}
               <Text style={{ color: currentTheme.colors.textSecondary }} className="text-lg mt-1">

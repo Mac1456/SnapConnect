@@ -14,6 +14,7 @@ import {
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
+import * as ImagePicker from 'expo-image-picker';
 // import { useSupabaseSnapStore as useSnapStore } from '../stores/supabaseSnapStore';
 // import { useSupabaseFriendStore as useFriendStore } from '../stores/supabaseFriendStore';
 
@@ -226,6 +227,55 @@ export default function CameraScreen({ navigation }) {
     setFacing(current => (current === 'back' ? 'front' : 'back'));
   };
 
+  const openCameraRoll = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        allowsEditing: true,
+        aspect: [9, 16],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        
+        // Show options for what to do with the selected media
+        Alert.alert(
+          'Use Selected Media',
+          `Selected ${asset.type === 'video' ? 'video' : 'photo'} from camera roll`,
+          [
+            { text: 'Send as Snap', onPress: () => handleSelectedMedia(asset, 'snap') },
+            { text: 'Post as Story', onPress: () => handleSelectedMedia(asset, 'story') },
+            { text: 'Cancel', style: 'cancel' }
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('🎥 CameraScreen: Error opening camera roll:', error);
+      Alert.alert('Error', 'Failed to open camera roll. Please try again.');
+    }
+  };
+
+  const handleSelectedMedia = async (asset, type) => {
+    try {
+      console.log(`🎥 CameraScreen: Handling selected ${asset.type} for ${type}`);
+      
+      // For now, just show success message
+      // In a full implementation, you would upload to Supabase and create snap/story
+      Alert.alert(
+        'Success!',
+        `${asset.type === 'video' ? 'Video' : 'Photo'} selected for ${type}. This would be uploaded in a full implementation.`,
+        [
+          { text: 'Select Another', onPress: openCameraRoll },
+          { text: 'Done', onPress: () => navigation.goBack() }
+        ]
+      );
+    } catch (error) {
+      console.error('🎥 CameraScreen: Error handling selected media:', error);
+      Alert.alert('Error', 'Failed to process selected media.');
+    }
+  };
+
   const formatDuration = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -317,22 +367,22 @@ export default function CameraScreen({ navigation }) {
 
         {/* Bottom Controls */}
         <View style={styles.bottomControls}>
+          {/* Camera Roll Button */}
+          <TouchableOpacity 
+            style={styles.cameraRollButton}
+            onPress={openCameraRoll}
+            disabled={isRecording}
+          >
+            <Ionicons name="images" size={24} color={isRecording ? "#666" : "white"} />
+          </TouchableOpacity>
+          
           <View style={styles.captureButtonContainer}>
-            <Pressable
+            <TouchableOpacity
               style={[
                 styles.captureButton,
                 isCapturing && styles.captureButtonDisabled
               ]}
               onPress={takePicture}
-              onPressIn={() => {
-                // Start recording after 200ms hold
-                setTimeout(() => {
-                  if (!isCapturing) {
-                    startVideoRecording();
-                  }
-                }, 200);
-              }}
-              onPressOut={stopVideoRecording}
               disabled={!isReady}
             >
               <Animated.View 
@@ -352,24 +402,23 @@ export default function CameraScreen({ navigation }) {
                   <Ionicons name="camera" size={28} color="black" />
                 )}
               </Animated.View>
-              
-              {/* Progress ring for video recording */}
-              {isRecording && (
-                <Animated.View 
-                  style={[
-                    styles.progressRing,
-                    {
-                      transform: [{
-                        rotate: progressAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: ['0deg', '360deg']
-                        })
-                      }]
-                    }
-                  ]}
-                />
-              )}
-            </Pressable>
+            </TouchableOpacity>
+            
+            {/* Video Record Button */}
+            <TouchableOpacity
+              style={[
+                styles.videoButton,
+                isRecording && styles.videoButtonRecording
+              ]}
+              onPress={isRecording ? stopVideoRecording : startVideoRecording}
+              disabled={!isReady || isCapturing}
+            >
+              <Ionicons 
+                name={isRecording ? "stop" : "videocam"} 
+                size={24} 
+                color={isRecording ? "white" : "white"} 
+              />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -510,7 +559,20 @@ const styles = StyleSheet.create({
     bottom: 40,
     left: 0,
     right: 0,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingHorizontal: 40,
+  },
+  cameraRollButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
   },
   captureButtonContainer: {
     alignItems: 'center',
@@ -548,6 +610,19 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 12,
     backgroundColor: 'white',
+  },
+  videoButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255, 68, 68, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
+  },
+  videoButtonRecording: {
+    backgroundColor: '#FF4444',
   },
   progressRing: {
     position: 'absolute',
