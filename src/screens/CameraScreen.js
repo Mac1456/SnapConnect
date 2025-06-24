@@ -21,11 +21,15 @@ import { useSupabaseAuthStore as useAuthStore } from '../stores/supabaseAuthStor
 
 const { width, height } = Dimensions.get('window');
 
-export default function CameraScreen({ navigation }) {
+export default function CameraScreen({ navigation, route }) {
   const [permission, requestPermission] = useCameraPermissions();
   const { sendStory, sendSnap } = useSnapStore();
   const { friends, getFriends } = useFriendStore();
   const { user } = useAuthStore();
+  
+  // Get recipient info from route params if coming from chat
+  const recipientInfo = route?.params || {};
+  const { recipientId, recipientUsername, mode } = recipientInfo;
   const [facing, setFacing] = useState('back');
   const [isReady, setIsReady] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -155,6 +159,12 @@ export default function CameraScreen({ navigation }) {
 
   const handleVideoSave = async (video) => {
     try {
+      // If we have a recipient, go directly to snap sending
+      if (recipientId && mode === 'snap') {
+        await handleDirectSnap(video.uri, 'video');
+        return;
+      }
+      
       const asset = await MediaLibrary.saveToLibraryAsync(video.uri);
       console.log('🎥 CameraScreen: Video saved to library:', asset);
       
@@ -171,10 +181,18 @@ export default function CameraScreen({ navigation }) {
     } catch (saveError) {
       console.log('🎥 CameraScreen: Could not save video to library (Expo Go limitation):', saveError.message);
       
+      // If we have a recipient, still try to send the snap
+      if (recipientId && mode === 'snap') {
+        await handleDirectSnap(video.uri, 'video');
+        return;
+      }
+      
       Alert.alert(
         'Video Recorded!',
         `Video recorded successfully (${recordingDuration}s)! Note: Saving to gallery is limited in Expo Go. Use a development build for full functionality.`,
         [
+          { text: 'Post as Story', onPress: () => handleCapturedMedia(video.uri, 'video', 'story') },
+          { text: 'Send as Snap', onPress: () => handleCapturedMedia(video.uri, 'video', 'snap') },
           { text: 'Record Another', onPress: () => {} },
           { text: 'Done', onPress: () => navigation.goBack() }
         ]
@@ -199,6 +217,12 @@ export default function CameraScreen({ navigation }) {
       });
       
       console.log('🎥 CameraScreen: Photo taken:', photo.uri);
+      
+      // If we have a recipient, go directly to snap sending
+      if (recipientId && mode === 'snap') {
+        await handleDirectSnap(photo.uri, 'image');
+        return;
+      }
       
       // Try to save to device (may not work in Expo Go)
       try {
@@ -362,6 +386,42 @@ export default function CameraScreen({ navigation }) {
     }
   };
 
+  const handleDirectSnap = async (uri, mediaType) => {
+    try {
+      console.log(`🎥 CameraScreen: Sending ${mediaType} snap directly to:`, recipientUsername);
+      
+      Alert.alert(
+        'Send Snap?',
+        `Send this ${mediaType === 'video' ? 'video' : 'photo'} to ${recipientUsername}?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Send', 
+            onPress: async () => {
+              try {
+                await sendSnap(recipientId, uri, mediaType, '', 3);
+                Alert.alert(
+                  'Snap Sent!',
+                  `Your ${mediaType === 'video' ? 'video' : 'photo'} snap has been sent to ${recipientUsername}!`,
+                  [
+                    { text: 'Send Another', onPress: () => setIsCapturing(false) },
+                    { text: 'Done', onPress: () => navigation.goBack() }
+                  ]
+                );
+              } catch (error) {
+                console.error('🎥 CameraScreen: Error sending direct snap:', error);
+                Alert.alert('Error', 'Failed to send snap. Please try again.');
+              }
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('🎥 CameraScreen: Error in handleDirectSnap:', error);
+      Alert.alert('Error', 'Failed to prepare snap. Please try again.');
+    }
+  };
+
   const formatDuration = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -447,7 +507,9 @@ export default function CameraScreen({ navigation }) {
         {/* Instructions */}
         <View style={styles.instructionsContainer}>
           <Text style={styles.instructionsText}>
-            {isRecording ? 'Recording...' : 'Tap for photo • Hold for video'}
+            {isRecording ? 'Recording...' : 
+             recipientId && mode === 'snap' ? `Taking snap for ${recipientUsername}` :
+             'Tap for photo • Hold for video'}
           </Text>
         </View>
 

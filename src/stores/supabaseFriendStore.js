@@ -38,23 +38,39 @@ export const useSupabaseFriendStore = create((set, get) => ({
   },
 
   // Send friend request
-  sendFriendRequest: async (targetUserId, currentUser) => {
+  sendFriendRequest: async (targetUserId, targetUsername) => {
     try {
       set({ loading: true, error: null });
       
-      if (!currentUser || !currentUser.uid) {
-        console.error('🟢 SupabaseFriendStore: No authenticated user provided');
+      // Get current user from Supabase auth
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !user) {
+        console.error('🟢 SupabaseFriendStore: No authenticated user found:', authError);
         set({ error: 'User not authenticated', loading: false });
         return;
       }
 
-      console.log('🟢 SupabaseFriendStore: Sending friend request from:', currentUser.uid, 'to:', targetUserId);
+      // Get user profile for username
+      const { data: profile, error: profileError } = await supabase
+        .from('users')
+        .select('username, display_name')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError) {
+        console.error('🟢 SupabaseFriendStore: Error getting user profile:', profileError);
+        set({ error: 'Failed to get user profile', loading: false });
+        return;
+      }
+
+      console.log('🟢 SupabaseFriendStore: Sending friend request from:', user.id, 'to:', targetUserId);
       
       // Check if friend request already exists
       const { data: existingRequest, error: checkError } = await supabase
         .from('friend_requests')
         .select('id')
-        .eq('requester_id', currentUser.uid)
+        .eq('requester_id', user.id)
         .eq('requested_id', targetUserId)
         .single();
 
@@ -74,10 +90,10 @@ export const useSupabaseFriendStore = create((set, get) => ({
       const { error } = await supabase
         .from('friend_requests')
         .insert({
-          requester_id: currentUser.uid,
+          requester_id: user.id,
           requested_id: targetUserId,
-          requester_username: currentUser.username || currentUser.email?.split('@')[0] || 'unknown',
-          requester_display_name: currentUser.displayName || currentUser.display_name || currentUser.username || currentUser.email?.split('@')[0] || 'Unknown User',
+          requester_username: profile.username || user.email?.split('@')[0] || 'unknown',
+          requester_display_name: profile.display_name || profile.username || user.email?.split('@')[0] || 'Unknown User',
           status: 'pending',
           created_at: new Date().toISOString(),
         });
@@ -102,15 +118,40 @@ export const useSupabaseFriendStore = create((set, get) => ({
   },
 
   // Accept friend request
-  acceptFriendRequest: async (requesterId, currentUserId) => {
+  acceptFriendRequest: async (requestId) => {
     try {
       set({ loading: true, error: null });
+      
+      // Get current user from Supabase auth
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !user) {
+        console.error('🟢 SupabaseFriendStore: No authenticated user found:', authError);
+        set({ error: 'User not authenticated', loading: false });
+        return;
+      }
+
+      // Get the friend request details
+      const { data: request, error: requestError } = await supabase
+        .from('friend_requests')
+        .select('*')
+        .eq('id', requestId)
+        .eq('requested_id', user.id)
+        .single();
+
+      if (requestError) {
+        console.error('🟢 SupabaseFriendStore: Error getting friend request:', requestError);
+        set({ error: 'Friend request not found', loading: false });
+        return;
+      }
+
+      const requesterId = request.requester_id;
       
       // Start a transaction to add friends and remove request
       const { error: friendError1 } = await supabase
         .from('friendships')
         .insert({
-          user_id: currentUserId,
+          user_id: user.id,
           friend_id: requesterId,
           created_at: new Date().toISOString(),
         });
@@ -119,25 +160,27 @@ export const useSupabaseFriendStore = create((set, get) => ({
         .from('friendships')
         .insert({
           user_id: requesterId,
-          friend_id: currentUserId,
+          friend_id: user.id,
           created_at: new Date().toISOString(),
         });
 
       // Remove the friend request
-      const { error: requestError } = await supabase
+      const { error: deleteError } = await supabase
         .from('friend_requests')
         .delete()
-        .eq('requester_id', requesterId)
-        .eq('requested_id', currentUserId);
+        .eq('id', requestId);
 
-      if (friendError1 || friendError2 || requestError) {
-        console.error('🟢 SupabaseFriendStore: acceptFriendRequest error:', { friendError1, friendError2, requestError });
+      if (friendError1 || friendError2 || deleteError) {
+        console.error('🟢 SupabaseFriendStore: acceptFriendRequest error:', { friendError1, friendError2, deleteError });
         set({ error: 'Failed to accept friend request', loading: false });
         return;
       }
 
       console.log('🟢 SupabaseFriendStore: Friend request accepted successfully');
       set({ loading: false });
+      
+      // Refresh friends list
+      get().getFriends(user.id);
       
     } catch (error) {
       console.error('🟢 SupabaseFriendStore: acceptFriendRequest error:', error);
@@ -146,15 +189,24 @@ export const useSupabaseFriendStore = create((set, get) => ({
   },
 
   // Reject friend request
-  rejectFriendRequest: async (requesterId, currentUserId) => {
+  rejectFriendRequest: async (requestId) => {
     try {
       set({ loading: true, error: null });
+      
+      // Get current user from Supabase auth
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !user) {
+        console.error('🟢 SupabaseFriendStore: No authenticated user found:', authError);
+        set({ error: 'User not authenticated', loading: false });
+        return;
+      }
       
       const { error } = await supabase
         .from('friend_requests')
         .delete()
-        .eq('requester_id', requesterId)
-        .eq('requested_id', currentUserId);
+        .eq('id', requestId)
+        .eq('requested_id', user.id);
 
       if (error) {
         console.error('🟢 SupabaseFriendStore: rejectFriendRequest error:', error);
@@ -242,31 +294,42 @@ export const useSupabaseFriendStore = create((set, get) => ({
   },
 
   // Get friend requests
-  getFriendRequests: async (userId) => {
+  getFriendRequests: async () => {
     try {
-      console.log('🟢 SupabaseFriendStore: Getting friend requests for:', userId);
+      // Get current user from Supabase auth
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !user) {
+        console.error('🟢 SupabaseFriendStore: No authenticated user found:', authError);
+        set({ error: 'User not authenticated' });
+        return [];
+      }
+
+      console.log('🟢 SupabaseFriendStore: Getting friend requests for:', user.id);
       
       const { data, error } = await supabase
         .from('friend_requests')
         .select('*')
-        .eq('requested_id', userId)
+        .eq('requested_id', user.id)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
 
       if (error) {
         console.error('🟢 SupabaseFriendStore: getFriendRequests error:', error);
         set({ error: error.message });
-        return;
+        return [];
       }
 
       console.log('🟢 SupabaseFriendStore: Found friend requests:', data?.length || 0);
 
       const friendRequests = data || [];
       set({ friendRequests });
+      return friendRequests;
       
     } catch (error) {
       console.error('🟢 SupabaseFriendStore: getFriendRequests error:', error);
       set({ error: error.message });
+      return [];
     }
   },
 
@@ -285,6 +348,7 @@ export const useSupabaseFriendStore = create((set, get) => ({
       }
 
       const friendRequests = data?.map(request => ({
+        id: request.id,
         userId: request.requester_id,
         username: request.requester_username,
         displayName: request.requester_display_name,
