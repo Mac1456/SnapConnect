@@ -1,0 +1,25 @@
+buildscript {
+    ext {
+        kotlinVersion = "1.8.10"
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.2.1'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.8.10"
+    }
+}
+allprojects {
+    repositories {
+        maven {
+            url("$rootDir/../node_modules/expo/android")
+        }
+        maven {
+            url("$rootDir/../node_modules/react-native/android")
+        }
+        google()
+        mavenCentral()
+    }
+}
