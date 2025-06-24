@@ -90,3 +90,4 @@ firestore-debug.log
 *.temp 
 
 firebase.config.js
+supabase.config.js

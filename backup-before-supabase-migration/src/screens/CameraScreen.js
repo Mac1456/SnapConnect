@@ -14,8 +14,8 @@ import {
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
-// import { useSupabaseSnapStore as useSnapStore } from '../stores/supabaseSnapStore';
-// import { useSupabaseFriendStore as useFriendStore } from '../stores/supabaseFriendStore';
+// import { useSnapStore } from '../stores/snapStore';
+// import { useFriendStore } from '../stores/friendStore';
 
 const { width, height } = Dimensions.get('window');
 

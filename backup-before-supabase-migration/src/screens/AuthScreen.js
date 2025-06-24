@@ -10,14 +10,14 @@ import {
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useSupabaseAuthStore as useAuthStore } from '../stores/supabaseAuthStore';
+import { useMockAuthStore as useAuthStore } from '../stores/mockAuthStore';
 
 console.log('🔑 AuthScreen: Component loaded');
 
 export default function AuthScreen() {
   console.log('🔑 AuthScreen: Component rendering...');
   
-  const [isLogin, setIsLogin] = useState(true); // Default to login
+  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
@@ -87,10 +87,9 @@ export default function AuthScreen() {
             <Text className="text-4xl font-bold text-white text-center mb-8">
               SnapConnect
             </Text>
-            <Text className="text-lg text-white/80 text-center mb-4">
+            <Text className="text-lg text-white/80 text-center mb-8">
               Share Moments. Disappear. Discover More.
             </Text>
-
 
             <View className="space-y-4">
               {!isLogin && (

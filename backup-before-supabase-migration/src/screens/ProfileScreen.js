@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useSupabaseAuthStore as useAuthStore } from '../stores/supabaseAuthStore';
+import { useMockAuthStore as useAuthStore } from '../stores/mockAuthStore';
 import { useThemeStore } from '../stores/themeStore';
 import * as ImagePicker from 'expo-image-picker';
 

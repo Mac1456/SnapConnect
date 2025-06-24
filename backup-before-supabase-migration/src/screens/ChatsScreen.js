@@ -10,9 +10,9 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useSupabaseAuthStore as useAuthStore } from '../stores/supabaseAuthStore';
-import { useSupabaseSnapStore as useSnapStore } from '../stores/supabaseSnapStore';
-import { useSupabaseFriendStore as useFriendStore } from '../stores/supabaseFriendStore';
+import { useAuthStore } from '../stores/authStore';
+import { useSnapStore } from '../stores/snapStore';
+import { useFriendStore } from '../stores/friendStore';
 import { useThemeStore } from '../stores/themeStore';
 
 export default function ChatsScreen({ navigation }) {

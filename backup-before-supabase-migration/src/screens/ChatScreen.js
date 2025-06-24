@@ -10,8 +10,8 @@ import {
 } from 'react-native';
 import { Video } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
-import { useSupabaseAuthStore as useAuthStore } from '../stores/supabaseAuthStore';
-import { useSupabaseSnapStore as useSnapStore } from '../stores/supabaseSnapStore';
+import { useAuthStore } from '../stores/authStore';
+import { useSnapStore } from '../stores/snapStore';
 
 const { width, height } = Dimensions.get('window');
 

@@ -3,7 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
 import { View, Text } from 'react-native';
-import { useSupabaseAuthStore as useAuthStore } from './src/stores/supabaseAuthStore';
+import { useMockAuthStore as useAuthStore } from './src/stores/mockAuthStore';
 import AuthScreen from './src/screens/AuthScreen';
 import MainTabNavigator from './src/navigation/MainTabNavigator';
 import CameraScreen from './src/screens/CameraScreen';

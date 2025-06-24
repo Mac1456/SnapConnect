@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useSupabaseAuthStore as useAuthStore } from '../stores/supabaseAuthStore';
+import { useAuthStore } from '../stores/authStore';
 import { useThemeStore } from '../stores/themeStore';
 
 const { width } = Dimensions.get('window');
