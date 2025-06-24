@@ -24,7 +24,9 @@ export default function StoriesScreen({ navigation }) {
 
   useEffect(() => {
     if (user && user.uid) {
-      console.log('📖 StoriesScreen: Loading all stories for user:', user.uid);
+      console.log('📖 StoriesScreen: Loading friends and stories for user:', user.uid);
+      // Load friends first
+      getFriends(user.uid);
       // Load all stories (including user's own and public stories)
       loadAllStories(user.uid);
     }
@@ -34,10 +36,11 @@ export default function StoriesScreen({ navigation }) {
   useFocusEffect(
     React.useCallback(() => {
       if (user && user.uid) {
-        console.log('📖 StoriesScreen: Screen focused, refreshing stories for user:', user.uid);
+        console.log('📖 StoriesScreen: Screen focused, refreshing stories and friends for user:', user.uid);
+        getFriends(user.uid);
         loadAllStories(user.uid);
       }
-    }, [user, loadAllStories])
+    }, [user, loadAllStories, getFriends])
   );
 
   // Group stories by user
@@ -48,6 +51,27 @@ export default function StoriesScreen({ navigation }) {
     acc[story.userId].push(story);
     return acc;
   }, {});
+
+  // Get friend IDs for filtering
+  const friendIds = friends.map(friend => friend.id);
+  console.log('📖 StoriesScreen: Friend IDs:', friendIds);
+  console.log('📖 StoriesScreen: All story user IDs:', Object.keys(storiesByUser));
+
+  // Filter stories to only show friends' stories (plus user's own)
+  const friendStoriesByUser = Object.keys(storiesByUser)
+    .filter(userId => {
+      // Include user's own stories or friends' stories
+      const isOwnStory = user && user.uid && userId === user.uid;
+      const isFriendStory = friendIds.includes(userId);
+      console.log('📖 StoriesScreen: Checking userId:', userId, 'isOwnStory:', isOwnStory, 'isFriendStory:', isFriendStory);
+      return isOwnStory || isFriendStory;
+    })
+    .reduce((acc, userId) => {
+      acc[userId] = storiesByUser[userId];
+      return acc;
+    }, {});
+
+  console.log('📖 StoriesScreen: Filtered friend stories:', Object.keys(friendStoriesByUser));
 
   const navigateToCamera = () => {
     console.log('📖 StoriesScreen: Camera button pressed');
@@ -122,14 +146,14 @@ export default function StoriesScreen({ navigation }) {
             </TouchableOpacity>
 
           {/* User's own stories */}
-          {user && user.uid && storiesByUser[user.uid] && (
+          {user && user.uid && friendStoriesByUser[user.uid] && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-4">
-              {storiesByUser[user.uid].map((story) => (
+              {friendStoriesByUser[user.uid].map((story) => (
                 <TouchableOpacity
                   key={story.id}
                   onPress={() => navigation.navigate('StoryView', { 
-                    stories: storiesByUser[user.uid], 
-                    initialIndex: storiesByUser[user.uid].indexOf(story) 
+                    stories: friendStoriesByUser[user.uid], 
+                    initialIndex: friendStoriesByUser[user.uid].indexOf(story) 
                   })}
                   className="mr-4"
                 >
@@ -158,14 +182,14 @@ export default function StoriesScreen({ navigation }) {
         </View>
 
         {/* Friends' Stories */}
-        {user && user.uid && Object.keys(storiesByUser).filter(userId => userId !== user.uid).length > 0 && (
+        {user && user.uid && Object.keys(friendStoriesByUser).filter(userId => userId !== user.uid).length > 0 && (
           <View className="px-4">
             <Text style={{ color: currentTheme.colors.text }} className="text-lg font-bold mb-3">Friends</Text>
             
-            {Object.keys(storiesByUser)
+            {Object.keys(friendStoriesByUser)
               .filter(userId => user && user.uid && userId !== user.uid)
               .map((userId) => {
-                const userStories = storiesByUser[userId];
+                const userStories = friendStoriesByUser[userId];
                 const latestStory = userStories[0];
                 const hasViewed = user && user.uid ? latestStory.views?.includes(user.uid) : false;
                 
@@ -218,7 +242,7 @@ export default function StoriesScreen({ navigation }) {
         )}
 
           {/* Empty State */}
-          {Object.keys(storiesByUser).length === 0 && (
+          {Object.keys(friendStoriesByUser).length === 0 && (
             <View className="items-center py-16">
               <View 
                 style={{ backgroundColor: currentTheme.colors.surface }}
@@ -235,6 +259,29 @@ export default function StoriesScreen({ navigation }) {
                   className="backdrop-blur-lg rounded-2xl px-8 py-4 mt-6"
                 >
                   <Text style={{ color: currentTheme.colors.text }} className="font-bold text-lg">🎬 Create Story</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Show message when user has no friends yet */}
+          {friends.length === 0 && Object.keys(friendStoriesByUser).filter(userId => user && user.uid && userId !== user.uid).length === 0 && (
+            <View className="px-4 py-8">
+              <View 
+                style={{ backgroundColor: currentTheme.colors.surface }}
+                className="backdrop-blur-lg rounded-3xl p-6 items-center"
+              >
+                <Ionicons name="person-add-outline" size={60} color={currentTheme.colors.text} />
+                <Text style={{ color: currentTheme.colors.text }} className="text-xl font-bold mt-4 text-center">Add Friends</Text>
+                <Text style={{ color: currentTheme.colors.textSecondary }} className="text-center mt-2 text-base">
+                  Add friends to see their stories here
+                </Text>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('FindFriends')}
+                  style={{ backgroundColor: currentTheme.colors.primary }}
+                  className="rounded-2xl px-6 py-3 mt-4"
+                >
+                  <Text style={{ color: currentTheme.colors.background }} className="font-bold">Find Friends</Text>
                 </TouchableOpacity>
               </View>
             </View>

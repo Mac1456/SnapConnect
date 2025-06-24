@@ -11,6 +11,7 @@ import ChatScreen from './src/screens/ChatScreen';
 import StoryViewScreen from './src/screens/StoryViewScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import FriendsScreen from './src/screens/FriendsScreen';
+import FindFriendsScreen from './src/screens/FindFriendsScreen';
 import DiscoverScreen from './src/screens/DiscoverScreen';
 import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -107,6 +108,14 @@ export default function App() {
               <Stack.Screen 
                 name="Friends" 
                 component={FriendsScreen}
+                options={{ 
+                  presentation: 'card',
+                  gestureEnabled: true
+                }}
+              />
+              <Stack.Screen 
+                name="FindFriends" 
+                component={FindFriendsScreen}
                 options={{ 
                   presentation: 'card',
                   gestureEnabled: true
