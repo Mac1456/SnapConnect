@@ -15,13 +15,17 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library';
 import * as ImagePicker from 'expo-image-picker';
-// import { useSupabaseSnapStore as useSnapStore } from '../stores/supabaseSnapStore';
-// import { useSupabaseFriendStore as useFriendStore } from '../stores/supabaseFriendStore';
+import { useSupabaseSnapStore as useSnapStore } from '../stores/supabaseSnapStore';
+import { useSupabaseFriendStore as useFriendStore } from '../stores/supabaseFriendStore';
+import { useSupabaseAuthStore as useAuthStore } from '../stores/supabaseAuthStore';
 
 const { width, height } = Dimensions.get('window');
 
 export default function CameraScreen({ navigation }) {
   const [permission, requestPermission] = useCameraPermissions();
+  const { sendStory, sendSnap } = useSnapStore();
+  const { friends, getFriends } = useFriendStore();
+  const { user } = useAuthStore();
   const [facing, setFacing] = useState('back');
   const [isReady, setIsReady] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -29,12 +33,18 @@ export default function CameraScreen({ navigation }) {
   const [recordingDuration, setRecordingDuration] = useState(0);
   const cameraRef = useRef(null);
   const recordingTimer = useRef(null);
+  const recordingTimeout = useRef(null);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     getMediaLibraryPermissions();
-  }, []);
+    
+    // Load friends if user has any
+    if (user && user.friends && user.friends.length > 0) {
+      getFriends(user.friends);
+    }
+  }, [user]);
 
   useEffect(() => {
     // Cleanup timer on unmount
@@ -149,9 +159,11 @@ export default function CameraScreen({ navigation }) {
       console.log('🎥 CameraScreen: Video saved to library:', asset);
       
       Alert.alert(
-        'Video Saved!',
-        `Your ${recordingDuration}s video has been saved to your gallery.`,
+        'Video Recorded!',
+        `What would you like to do with your ${recordingDuration}s video?`,
         [
+          { text: 'Post as Story', onPress: () => handleCapturedMedia(video.uri, 'video', 'story') },
+          { text: 'Send as Snap', onPress: () => handleCapturedMedia(video.uri, 'video', 'snap') },
           { text: 'Record Another', onPress: () => {} },
           { text: 'Done', onPress: () => navigation.goBack() }
         ]
@@ -193,11 +205,13 @@ export default function CameraScreen({ navigation }) {
         const asset = await MediaLibrary.saveToLibraryAsync(photo.uri);
         console.log('🎥 CameraScreen: Photo saved to library:', asset);
         
-        // Show success feedback
+        // Show options for what to do with the photo
         Alert.alert(
-          'Photo Saved!',
-          'Your photo has been saved to your gallery.',
+          'Photo Captured!',
+          'What would you like to do with this photo?',
           [
+            { text: 'Post as Story', onPress: () => handleCapturedMedia(photo.uri, 'image', 'story') },
+            { text: 'Send as Snap', onPress: () => handleCapturedMedia(photo.uri, 'image', 'snap') },
             { text: 'Take Another', onPress: () => setIsCapturing(false) },
             { text: 'Done', onPress: () => navigation.goBack() }
           ]
@@ -205,11 +219,13 @@ export default function CameraScreen({ navigation }) {
       } catch (saveError) {
         console.log('🎥 CameraScreen: Could not save to library (Expo Go limitation):', saveError.message);
         
-        // Show different message for Expo Go
+        // Show options for what to do with the photo
         Alert.alert(
-          'Photo Taken!',
-          'Photo captured successfully! Note: Saving to gallery is limited in Expo Go. Use a development build for full functionality.',
+          'Photo Captured!',
+          'What would you like to do with this photo?',
           [
+            { text: 'Post as Story', onPress: () => handleCapturedMedia(photo.uri, 'image', 'story') },
+            { text: 'Send as Snap', onPress: () => handleCapturedMedia(photo.uri, 'image', 'snap') },
             { text: 'Take Another', onPress: () => setIsCapturing(false) },
             { text: 'Done', onPress: () => navigation.goBack() }
           ]
@@ -260,19 +276,89 @@ export default function CameraScreen({ navigation }) {
     try {
       console.log(`🎥 CameraScreen: Handling selected ${asset.type} for ${type}`);
       
-      // For now, just show success message
-      // In a full implementation, you would upload to Supabase and create snap/story
-      Alert.alert(
-        'Success!',
-        `${asset.type === 'video' ? 'Video' : 'Photo'} selected for ${type}. This would be uploaded in a full implementation.`,
-        [
-          { text: 'Select Another', onPress: openCameraRoll },
-          { text: 'Done', onPress: () => navigation.goBack() }
-        ]
-      );
+      if (type === 'story') {
+        // Post as story
+        const mediaType = asset.type === 'video' ? 'video' : 'image';
+        await sendStory(asset.uri, mediaType, '');
+        
+        Alert.alert(
+          'Story Posted!',
+          `Your ${asset.type === 'video' ? 'video' : 'photo'} story has been posted successfully!`,
+          [
+            { text: 'Post Another', onPress: openCameraRoll },
+            { text: 'Done', onPress: () => navigation.goBack() }
+          ]
+        );
+      } else if (type === 'snap') {
+        // Show friend selection for snap
+        showFriendSelection(asset.uri, asset.type === 'video' ? 'video' : 'image');
+      }
     } catch (error) {
       console.error('🎥 CameraScreen: Error handling selected media:', error);
       Alert.alert('Error', 'Failed to process selected media.');
+    }
+  };
+
+  const handleCapturedMedia = async (uri, mediaType, type) => {
+    try {
+      console.log(`🎥 CameraScreen: Handling captured ${mediaType} for ${type}`);
+      
+      if (type === 'story') {
+        await sendStory(uri, mediaType, '');
+        Alert.alert(
+          'Story Posted!',
+          `Your ${mediaType === 'video' ? 'video' : 'photo'} story has been posted successfully!`,
+          [{ text: 'OK' }]
+        );
+      } else if (type === 'snap') {
+        // Show friend selection for snap
+        showFriendSelection(uri, mediaType);
+      }
+    } catch (error) {
+      console.error('🎥 CameraScreen: Error handling media:', error);
+      Alert.alert('Error', 'Failed to process media. Please try again.');
+    }
+  };
+
+  const showFriendSelection = (uri, mediaType) => {
+    // For now, show a simple alert with friend options
+    // In a full app, this would be a modal with friend list
+    if (friends.length === 0) {
+      Alert.alert(
+        'No Friends',
+        'Add friends to send snaps! Go to the Chats tab to add friends.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    // Create buttons for each friend
+    const friendButtons = friends.slice(0, 5).map(friend => ({
+      text: friend.displayName || friend.username,
+      onPress: () => sendSnapToFriend(uri, mediaType, friend.id)
+    }));
+
+    // Add cancel button
+    friendButtons.push({ text: 'Cancel', style: 'cancel' });
+
+    Alert.alert(
+      'Send Snap To...',
+      'Choose a friend to send your snap to:',
+      friendButtons
+    );
+  };
+
+  const sendSnapToFriend = async (uri, mediaType, friendId) => {
+    try {
+      await sendSnap(friendId, uri, mediaType, '', 3);
+      Alert.alert(
+        'Snap Sent!',
+        `Your ${mediaType === 'video' ? 'video' : 'photo'} snap has been sent successfully!`,
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      console.error('🎥 CameraScreen: Error sending snap:', error);
+      Alert.alert('Error', 'Failed to send snap. Please try again.');
     }
   };
 
@@ -320,7 +406,7 @@ export default function CameraScreen({ navigation }) {
   // Camera view
   return (
     <SafeAreaView style={styles.container}>
-      <CameraView
+      <CameraView 
         ref={cameraRef}
         style={styles.camera}
         facing={facing}
@@ -377,12 +463,31 @@ export default function CameraScreen({ navigation }) {
           </TouchableOpacity>
           
           <View style={styles.captureButtonContainer}>
-            <TouchableOpacity
+            <Pressable
               style={[
                 styles.captureButton,
                 isCapturing && styles.captureButtonDisabled
               ]}
               onPress={takePicture}
+              onPressIn={() => {
+                // Start recording after 500ms hold
+                recordingTimeout.current = setTimeout(() => {
+                  if (!isCapturing && !isRecording) {
+                    startVideoRecording();
+                  }
+                }, 500);
+              }}
+              onPressOut={() => {
+                // Cancel timeout if user releases quickly
+                if (recordingTimeout.current) {
+                  clearTimeout(recordingTimeout.current);
+                  recordingTimeout.current = null;
+                }
+                // Stop recording if currently recording
+                if (isRecording) {
+                  stopVideoRecording();
+                }
+              }}
               disabled={!isReady}
             >
               <Animated.View 
@@ -402,23 +507,24 @@ export default function CameraScreen({ navigation }) {
                   <Ionicons name="camera" size={28} color="black" />
                 )}
               </Animated.View>
-            </TouchableOpacity>
-            
-            {/* Video Record Button */}
-            <TouchableOpacity
-              style={[
-                styles.videoButton,
-                isRecording && styles.videoButtonRecording
-              ]}
-              onPress={isRecording ? stopVideoRecording : startVideoRecording}
-              disabled={!isReady || isCapturing}
-            >
-              <Ionicons 
-                name={isRecording ? "stop" : "videocam"} 
-                size={24} 
-                color={isRecording ? "white" : "white"} 
-              />
-            </TouchableOpacity>
+              
+              {/* Progress ring for video recording */}
+              {isRecording && (
+                <Animated.View 
+                  style={[
+                    styles.progressRing,
+                    {
+                      transform: [{
+                        rotate: progressAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: ['0deg', '360deg']
+                        })
+                      }]
+                    }
+                  ]}
+                />
+              )}
+            </Pressable>
           </View>
         </View>
 

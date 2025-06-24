@@ -140,12 +140,17 @@ export const useSupabaseAuthStore = create((set, get) => ({
     try {
       set({ loading: true, error: null });
       
-      // Check if username is already taken
+      // Check if username is already taken (ignore PGRST116 error which means no rows found)
       const { data: existingUser, error: checkError } = await supabase
         .from('users')
         .select('username')
         .eq('username', username)
         .single();
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.error('🟢 SupabaseAuthStore: Error checking username:', checkError);
+        // Continue with signup even if check fails
+      }
 
       if (existingUser) {
         set({ error: 'Username is already taken. Please choose a different one.', loading: false });
@@ -180,25 +185,39 @@ export const useSupabaseAuthStore = create((set, get) => ({
         // Wait a moment for the auth session to be fully established
         await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // Create user profile using the secure function
-        const { error: profileError } = await supabase.rpc('create_user_profile', {
-          user_id: data.user.id,
-          username: username,
-          display_name: username,
-          email: email,
-        });
+        // Create user profile using secure function
+        const { data: profileData, error: profileError } = await supabase
+          .rpc('create_user_profile', {
+            user_id: data.user.id,
+            user_email: email,
+            user_username: username,
+            user_display_name: username  // Use username as display_name
+          });
 
         if (profileError) {
-          console.error('🟢 SupabaseAuthStore: Error creating profile:', profileError);
-          set({ error: `Profile creation failed: ${profileError.message}`, loading: false });
-          
-          // Clean up the auth user if profile creation failed
-          await supabase.auth.signOut();
+          console.error('🟢 SupabaseAuthStore: Profile creation error:', profileError);
+          set({ 
+            error: profileError.message || 'Failed to create user profile',
+            loading: false 
+          });
           return;
         }
 
         console.log('🟢 SupabaseAuthStore: User profile created successfully');
-        set({ loading: false });
+        
+        // Update the user object with profile data
+        set({ 
+          user: {
+            uid: data.user.id,
+            email: data.user.email,
+            username: username,
+            displayName: username,  // Set displayName to username
+            display_name: username, // Also set snake_case version
+            profilePicture: null,
+            profile_picture: null
+          },
+          loading: false 
+        });
       }
       
     } catch (error) {

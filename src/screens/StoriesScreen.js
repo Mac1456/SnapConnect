@@ -11,18 +11,43 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSupabaseAuthStore as useAuthStore } from '../stores/supabaseAuthStore';
 import { useThemeStore } from '../stores/themeStore';
-import { useNavigation } from '@react-navigation/native';
-// import { useSupabaseSnapStore as useSnapStore } from '../stores/supabaseSnapStore';
-// import { useSupabaseFriendStore as useFriendStore } from '../stores/supabaseFriendStore';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useSupabaseSnapStore as useSnapStore } from '../stores/supabaseSnapStore';
+import { useSupabaseFriendStore as useFriendStore } from '../stores/supabaseFriendStore';
 
 export default function StoriesScreen({ navigation }) {
   const { user } = useAuthStore();
   const { currentTheme } = useThemeStore();
   const parentNavigation = useNavigation();
-  // Mock data for now since we don't have Firebase stores working
-  const stories = [];
-  const friends = [];
-  const storiesByUser = {};
+  const { stories, listenToStories, loadAllStories } = useSnapStore();
+  const { friends, getFriends } = useFriendStore();
+
+  useEffect(() => {
+    if (user && user.uid) {
+      console.log('📖 StoriesScreen: Loading all stories for user:', user.uid);
+      // Load all stories (including user's own and public stories)
+      loadAllStories(user.uid);
+    }
+  }, [user]);
+
+  // Refresh stories when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      if (user && user.uid) {
+        console.log('📖 StoriesScreen: Screen focused, refreshing stories for user:', user.uid);
+        loadAllStories(user.uid);
+      }
+    }, [user, loadAllStories])
+  );
+
+  // Group stories by user
+  const storiesByUser = stories.reduce((acc, story) => {
+    if (!acc[story.userId]) {
+      acc[story.userId] = [];
+    }
+    acc[story.userId].push(story);
+    return acc;
+  }, {});
 
   const navigateToCamera = () => {
     console.log('📖 StoriesScreen: Camera button pressed');
@@ -97,7 +122,7 @@ export default function StoriesScreen({ navigation }) {
             </TouchableOpacity>
 
           {/* User's own stories */}
-          {storiesByUser[user.uid] && (
+          {user && user.uid && storiesByUser[user.uid] && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-4">
               {storiesByUser[user.uid].map((story) => (
                 <TouchableOpacity
@@ -133,16 +158,16 @@ export default function StoriesScreen({ navigation }) {
         </View>
 
         {/* Friends' Stories */}
-        {Object.keys(storiesByUser).filter(userId => userId !== user.uid).length > 0 && (
+        {user && user.uid && Object.keys(storiesByUser).filter(userId => userId !== user.uid).length > 0 && (
           <View className="px-4">
             <Text style={{ color: currentTheme.colors.text }} className="text-lg font-bold mb-3">Friends</Text>
             
             {Object.keys(storiesByUser)
-              .filter(userId => userId !== user.uid)
+              .filter(userId => user && user.uid && userId !== user.uid)
               .map((userId) => {
                 const userStories = storiesByUser[userId];
                 const latestStory = userStories[0];
-                const hasViewed = latestStory.views?.includes(user.uid);
+                const hasViewed = user && user.uid ? latestStory.views?.includes(user.uid) : false;
                 
                 return (
                   <TouchableOpacity

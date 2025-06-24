@@ -6,12 +6,14 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSupabaseAuthStore as useAuthStore } from '../stores/supabaseAuthStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useNavigation } from '@react-navigation/native';
+import UserSwitcher from '../components/UserSwitcher';
 // import { useSupabaseSnapStore as useSnapStore } from '../stores/supabaseSnapStore';
 // import { useSupabaseFriendStore as useFriendStore } from '../stores/supabaseFriendStore';
 
@@ -19,6 +21,7 @@ export default function HomeScreen({ navigation }) {
   const { user, signOut } = useAuthStore();
   const { currentTheme } = useThemeStore();
   const parentNavigation = useNavigation();
+  const [showUserSwitcher, setShowUserSwitcher] = useState(false);
   // Mock data for now
   const snaps = [];
   const friends = [];
@@ -43,7 +46,7 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  const navigateToProfile = () => {
+  const handleProfilePress = () => {
     console.log('🏠 HomeScreen: Profile button pressed');
     try {
       // Try to get the parent navigation (stack navigator)
@@ -62,17 +65,15 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
+  const handleProfileLongPress = () => {
+    console.log('🏠 HomeScreen: Profile button long pressed - showing user switcher');
+    setShowUserSwitcher(true);
+  };
+
   const handleSearchPress = () => {
     console.log('🏠 HomeScreen: Search button pressed');
-    Alert.alert(
-      'Quick Actions',
-      'Choose an action:',
-      [
-        { text: 'Search Users', onPress: () => Alert.alert('Search', 'Search functionality coming soon!') },
-        { text: 'Switch User', onPress: handleLogout },
-        { text: 'Cancel', style: 'cancel' }
-      ]
-    );
+    // Navigate to search/discover functionality
+    navigation.navigate('Discover');
   };
 
   const handleLogout = () => {
@@ -107,7 +108,8 @@ export default function HomeScreen({ navigation }) {
         {/* Header */}
         <View className="flex-row items-center justify-between px-4 py-3">
           <TouchableOpacity 
-            onPress={navigateToProfile}
+            onPress={handleProfilePress}
+            onLongPress={handleProfileLongPress}
             style={{
               width: 48,
               height: 48,
@@ -122,7 +124,19 @@ export default function HomeScreen({ navigation }) {
               elevation: 4,
             }}
           >
-            <Ionicons name="person" size={24} color={currentTheme.colors.accent} />
+            {user?.profilePicture || user?.profile_picture ? (
+              <Image 
+                source={{ uri: user.profilePicture || user.profile_picture }} 
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 24,
+                }}
+                resizeMode="cover"
+              />
+            ) : (
+              <Ionicons name="person" size={24} color={currentTheme.colors.accent} />
+            )}
           </TouchableOpacity>
           
           <Text style={{ color: currentTheme.colors.text }} className="text-2xl font-bold drop-shadow-lg">SnapConnect</Text>
@@ -226,6 +240,12 @@ export default function HomeScreen({ navigation }) {
           </View>
         </View>
       </SafeAreaView>
+      
+      {/* User Switcher Modal */}
+      <UserSwitcher 
+        visible={showUserSwitcher}
+        onClose={() => setShowUserSwitcher(false)} 
+      />
     </LinearGradient>
   );
 } 

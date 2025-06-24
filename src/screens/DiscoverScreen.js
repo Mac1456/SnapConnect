@@ -7,17 +7,27 @@ import {
   ScrollView,
   Image,
   Dimensions,
+  TextInput,
+  Alert,
+  FlatList,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSupabaseAuthStore as useAuthStore } from '../stores/supabaseAuthStore';
+import { useSupabaseFriendStore as useFriendStore } from '../stores/supabaseFriendStore';
 import { useThemeStore } from '../stores/themeStore';
+import { supabase } from '../../supabase.config';
 
 const { width } = Dimensions.get('window');
 
-export default function DiscoverScreen({ navigation }) {
+const DiscoverScreen = ({ navigation }) => {
   const { user } = useAuthStore();
   const { currentTheme } = useThemeStore();
+  const { searchUsers, sendFriendRequest } = useFriendStore();
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [loading, setLoading] = useState(false);
   
   // Mock data for discover content - In production, this would come from Firebase
   const [discoverContent] = useState([
@@ -86,6 +96,152 @@ export default function DiscoverScreen({ navigation }) {
     }
   ];
 
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
+    
+    try {
+      setLoading(true);
+      const results = await searchUsers(searchQuery.trim());
+      
+      // Map the results to the expected format and filter out current user
+      const mappedResults = results
+        .filter(u => u.id !== user.uid)
+        .map(u => ({
+          id: u.id,
+          username: u.username,
+          displayName: u.display_name || u.username || u.email?.split('@')[0] || 'Unknown User',
+          email: u.email,
+          profilePicture: u.profile_picture
+        }));
+        
+      console.log('🔍 DiscoverScreen: Mapped search results:', mappedResults);
+      setSearchResults(mappedResults);
+    } catch (error) {
+      console.error('Search error:', error);
+      Alert.alert('Error', 'Failed to search users');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendFriendRequest = async (targetUser) => {
+    try {
+      setLoading(true);
+      console.log('🔍 DiscoverScreen: Sending friend request to:', targetUser.username);
+      
+      await sendFriendRequest(targetUser.id, targetUser.username);
+      
+      Alert.alert(
+        'Success', 
+        `Friend request sent to @${targetUser.username}!`,
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      console.error('Friend request error:', error);
+      Alert.alert('Error', 'Failed to send friend request');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendMessage = (targetUser) => {
+    // Navigate to chat with this user
+    navigation.navigate('Chat', { 
+      recipientId: targetUser.id,
+      recipientUsername: targetUser.username || targetUser.displayName,
+      recipientName: targetUser.displayName || targetUser.username
+    });
+  };
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      handleSearch();
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
+
+  const renderUserItem = ({ item }) => (
+    <View style={{
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 15,
+      backgroundColor: currentTheme.colors.surface,
+      marginHorizontal: 15,
+      marginVertical: 5,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: currentTheme.colors.border,
+    }}>
+      <View style={{
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        backgroundColor: currentTheme.colors.primary,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+      }}>
+        {item.profilePicture ? (
+          <Image 
+            source={{ uri: item.profilePicture }} 
+            style={{ width: 50, height: 50, borderRadius: 25 }}
+          />
+        ) : (
+          <Text style={{ 
+            fontSize: 18, 
+            fontWeight: 'bold',
+            color: currentTheme.colors.background 
+          }}>
+            {(item.username || item.displayName)?.charAt(0).toUpperCase()}
+          </Text>
+        )}
+      </View>
+      
+      <View style={{ flex: 1 }}>
+        <Text style={{
+          fontSize: 16,
+          fontWeight: 'bold',
+          color: currentTheme.colors.text,
+        }}>
+          {item.username}
+        </Text>
+        <Text style={{
+          fontSize: 14,
+          color: currentTheme.colors.textSecondary,
+        }}>
+          {item.displayName}
+        </Text>
+      </View>
+
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <TouchableOpacity
+          style={{
+            backgroundColor: currentTheme.colors.primary,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            borderRadius: 20,
+          }}
+          onPress={() => handleSendFriendRequest(item)}
+        >
+          <Ionicons name="person-add" size={16} color={currentTheme.colors.background} />
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={{
+            backgroundColor: currentTheme.colors.border,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            borderRadius: 20,
+          }}
+          onPress={() => handleSendMessage(item)}
+        >
+          <Ionicons name="chatbubble" size={16} color={currentTheme.colors.text} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
   return (
     <LinearGradient
       colors={currentTheme.colors.background}
@@ -98,10 +254,94 @@ export default function DiscoverScreen({ navigation }) {
           className="flex-row items-center justify-between px-4 py-3"
         >
           <Text style={{ color: currentTheme.colors.text }} className="text-2xl font-bold">Discover</Text>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowSearch(!showSearch)}>
             <Ionicons name="search" size={24} color={currentTheme.colors.text} />
           </TouchableOpacity>
         </View>
+
+        {/* Search Section */}
+        {showSearch && (
+          <View className="px-4 py-4" style={{ backgroundColor: currentTheme.colors.surface }}>
+            <Text style={{ color: currentTheme.colors.text }} className="text-lg font-bold mb-3">Find Friends</Text>
+            
+            <View className="flex-row mb-3">
+              <TextInput
+                style={{ 
+                  backgroundColor: currentTheme.colors.background[0],
+                  color: currentTheme.colors.text,
+                  borderColor: currentTheme.colors.textTertiary
+                }}
+                className="flex-1 border rounded-xl px-4 py-2 mr-2"
+                placeholder="Search by username..."
+                placeholderTextColor={currentTheme.colors.textTertiary}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                onSubmitEditing={handleSearch}
+              />
+              <TouchableOpacity
+                onPress={handleSearch}
+                disabled={loading}
+                style={{ backgroundColor: currentTheme.colors.primary }}
+                className="rounded-xl px-4 py-2"
+              >
+                <Ionicons name="search" size={20} color={currentTheme.colors.accent} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Search Results */}
+            {loading ? (
+              <View style={{
+                flex: 1,
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}>
+                <Text style={{
+                  fontSize: 16,
+                  color: currentTheme.colors.textSecondary,
+                }}>
+                  Searching...
+                </Text>
+              </View>
+            ) : searchResults.length > 0 ? (
+              <FlatList
+                data={searchResults}
+                renderItem={renderUserItem}
+                keyExtractor={(item) => item.id}
+                showsVerticalScrollIndicator={false}
+              />
+            ) : searchQuery.trim() ? (
+              <View style={{
+                flex: 1,
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}>
+                <Ionicons name="search" size={48} color={currentTheme.colors.textSecondary} />
+                <Text style={{
+                  fontSize: 16,
+                  color: currentTheme.colors.textSecondary,
+                  marginTop: 10,
+                }}>
+                  No users found
+                </Text>
+              </View>
+            ) : (
+              <View style={{
+                flex: 1,
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}>
+                <Ionicons name="people" size={48} color={currentTheme.colors.textSecondary} />
+                <Text style={{
+                  fontSize: 16,
+                  color: currentTheme.colors.textSecondary,
+                  marginTop: 10,
+                }}>
+                  Search for people to connect with
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
 
         <ScrollView className="flex-1">
           {/* Coming Soon - RAG Features */}
@@ -225,4 +465,6 @@ export default function DiscoverScreen({ navigation }) {
       </SafeAreaView>
     </LinearGradient>
   );
-} 
+};
+
+export default DiscoverScreen; 

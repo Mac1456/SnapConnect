@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '../../supabase.config';
+import { useSupabaseAuthStore } from './supabaseAuthStore';
 
 export const useSupabaseSnapStore = create((set, get) => ({
   snaps: [],
@@ -12,7 +13,17 @@ export const useSupabaseSnapStore = create((set, get) => ({
   sendSnap: async (recipientId, mediaUri, mediaType, caption = '', timer = 3) => {
     try {
       set({ loading: true, error: null });
-      const { user } = get();
+      
+      // Get current user from auth store
+      const user = useSupabaseAuthStore.getState().user;
+      
+      if (!user || !user.uid) {
+        console.error('🟢 SupabaseSnapStore: No authenticated user found');
+        set({ error: 'User not authenticated', loading: false });
+        return;
+      }
+
+      console.log('🟢 SupabaseSnapStore: Sending snap for user:', user.uid);
       
       // Upload media to Supabase Storage
       const fileName = `snaps/${Date.now()}_${Math.random().toString(36).substring(7)}`;
@@ -41,7 +52,7 @@ export const useSupabaseSnapStore = create((set, get) => ({
         .from('snaps')
         .insert({
           sender_id: user.uid,
-          sender_username: user.username,
+          sender_username: user.username || user.email?.split('@')[0] || 'unknown',
           recipient_id: recipientId,
           media_url: publicUrl,
           media_type: mediaType,
@@ -70,13 +81,26 @@ export const useSupabaseSnapStore = create((set, get) => ({
   sendStory: async (mediaUri, mediaType, caption = '') => {
     try {
       set({ loading: true, error: null });
-      const { user } = get();
       
-      // Upload media to Supabase Storage
-      const fileName = `stories/${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      // Get current user from auth store
+      const user = useSupabaseAuthStore.getState().user;
+      
+      if (!user || !user.uid) {
+        console.error('🟢 SupabaseSnapStore: No authenticated user found');
+        set({ error: 'User not authenticated', loading: false });
+        return;
+      }
+
+      console.log('🟢 SupabaseSnapStore: Sending story for user:', user.uid);
+
+      // Create unique filename
+      const fileName = `stories/${user.uid}/${Date.now()}.${mediaType === 'image' ? 'jpg' : 'mp4'}`;
+      
+      // Convert URI to blob
       const response = await fetch(mediaUri);
       const blob = await response.blob();
-      
+
+      // Upload to Supabase Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('media')
         .upload(fileName, blob, {
@@ -100,8 +124,8 @@ export const useSupabaseSnapStore = create((set, get) => ({
         .from('stories')
         .insert({
           user_id: user.uid,
-          username: user.username,
-          display_name: user.displayName,
+          username: user.username || user.email?.split('@')[0] || 'unknown',
+          display_name: user.displayName || user.display_name || user.username || user.email?.split('@')[0] || 'Unknown User',
           media_url: publicUrl,
           media_type: mediaType,
           caption,
@@ -229,6 +253,8 @@ export const useSupabaseSnapStore = create((set, get) => ({
   // Load stories (helper function)
   loadStories: async (friendIds) => {
     try {
+      console.log('🟢 SupabaseSnapStore: Loading stories for friends:', friendIds);
+      
       const { data, error } = await supabase
         .from('stories')
         .select('*')
@@ -240,6 +266,8 @@ export const useSupabaseSnapStore = create((set, get) => ({
         console.error('🟢 SupabaseSnapStore: loadStories error:', error);
         return;
       }
+
+      console.log('🟢 SupabaseSnapStore: Raw stories data:', data);
 
       const stories = data?.map(story => ({
         id: story.id,
@@ -254,10 +282,50 @@ export const useSupabaseSnapStore = create((set, get) => ({
         createdAt: story.created_at,
       })) || [];
 
+      console.log('🟢 SupabaseSnapStore: Processed stories:', stories.length, 'stories');
       set({ stories });
       
     } catch (error) {
       console.error('🟢 SupabaseSnapStore: loadStories error:', error);
+    }
+  },
+
+  // Load all stories (including user's own)
+  loadAllStories: async (userId) => {
+    try {
+      console.log('🟢 SupabaseSnapStore: Loading all stories...');
+      
+      const { data, error } = await supabase
+        .from('stories')
+        .select('*')
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('🟢 SupabaseSnapStore: loadAllStories error:', error);
+        return;
+      }
+
+      console.log('🟢 SupabaseSnapStore: Raw all stories data:', data?.length || 0, 'stories');
+
+      const stories = data?.map(story => ({
+        id: story.id,
+        userId: story.user_id,
+        username: story.username,
+        displayName: story.display_name,
+        mediaUrl: story.media_url,
+        mediaType: story.media_type,
+        caption: story.caption,
+        views: story.views || [],
+        expiresAt: story.expires_at,
+        createdAt: story.created_at,
+      })) || [];
+
+      console.log('🟢 SupabaseSnapStore: Processed all stories:', stories.length, 'stories');
+      set({ stories });
+      
+    } catch (error) {
+      console.error('🟢 SupabaseSnapStore: loadAllStories error:', error);
     }
   },
 

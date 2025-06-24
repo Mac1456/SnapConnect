@@ -152,21 +152,32 @@ export default function StoryViewScreen({ navigation, route }) {
 
         {/* Story Content */}
         <View className="flex-1 items-center justify-center">
-          {currentStory.mediaType === 'image' ? (
-            <Image
-              source={{ uri: currentStory.mediaUrl }}
-              style={{ width, height: height * 0.8 }}
-              resizeMode="contain"
-            />
+          {currentStory.mediaUrl ? (
+            currentStory.mediaType === 'image' ? (
+              <Image
+                source={{ uri: currentStory.mediaUrl }}
+                style={{ width, height: height * 0.8 }}
+                resizeMode="contain"
+                onError={(error) => console.error('StoryView Image Error:', error)}
+                onLoad={() => console.log('StoryView Image Loaded:', currentStory.mediaUrl)}
+              />
+            ) : (
+              <Video
+                source={{ uri: currentStory.mediaUrl }}
+                style={{ width, height: height * 0.8 }}
+                resizeMode="contain"
+                shouldPlay
+                isLooping={false}
+                useNativeControls={false}
+                onError={(error) => console.error('StoryView Video Error:', error)}
+                onLoad={() => console.log('StoryView Video Loaded:', currentStory.mediaUrl)}
+              />
+            )
           ) : (
-            <Video
-              source={{ uri: currentStory.mediaUrl }}
-              style={{ width, height: height * 0.8 }}
-              resizeMode="contain"
-              shouldPlay
-              isLooping={false}
-              useNativeControls={false}
-            />
+            <View className="items-center justify-center" style={{ width, height: height * 0.8 }}>
+              <Ionicons name="image-outline" size={80} color="white" />
+              <Text className="text-white text-lg mt-4">Media not available</Text>
+            </View>
           )}
           
           {/* Caption */}
