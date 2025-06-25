@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Modal, TextInput, Alert, Image, ScrollView, FlatList } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, TextInput, Alert, Image, ScrollView, FlatList, SafeAreaView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useSupabaseAuthStore } from '../stores/supabaseAuthStore';
@@ -7,7 +7,7 @@ import { useThemeStore } from '../stores/themeStore';
 
 const UserSwitcher = ({ visible, onClose }) => {
   const { signIn, signUp, user, loading } = useSupabaseAuthStore();
-  const { theme } = useThemeStore();
+  const { currentTheme } = useThemeStore();
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [showAccountList, setShowAccountList] = useState(false);
   const [email, setEmail] = useState('');
@@ -108,9 +108,9 @@ const UserSwitcher = ({ visible, onClose }) => {
       
       // For test users, use the predefined password
       const testUser = testUsers.find(tu => tu.email === account.email);
-      const password = testUser ? testUser.password : 'password123'; // Default password for saved accounts
+      const passwordToUse = testUser ? testUser.password : 'password123'; // Default password for test accounts
       
-      await signIn(account.email, password);
+      await signIn(account.email, passwordToUse);
       await saveAccount(account.email, account.username, account.displayName);
       
       // Close all modals
@@ -152,38 +152,21 @@ const UserSwitcher = ({ visible, onClose }) => {
     }
   };
 
-  const currentTheme = theme === 'dark' ? {
-    colors: {
-      background: '#000000',
-      surface: '#1a1a1a',
-      primary: '#FFFC00',
-      text: '#ffffff',
-      textSecondary: '#b0b0b0',
-      border: '#404040',
-      danger: '#ff4444',
-    }
-  } : {
-    colors: {
-      background: '#ffffff',
-      surface: '#f8f9fa',
-      primary: '#FFFC00',
-      text: '#000000',
-      textSecondary: '#666666',
-      border: '#e0e0e0',
-      danger: '#dc3545',
-    }
-  };
-
   const renderAccountItem = ({ item }) => (
     <View style={{
       flexDirection: 'row',
       alignItems: 'center',
-      padding: 15,
+      padding: 16,
       backgroundColor: currentTheme.colors.surface,
-      marginVertical: 5,
+      marginVertical: 4,
       borderRadius: 12,
-      borderWidth: 1,
-      borderColor: currentTheme.colors.border,
+      borderWidth: 2,
+      borderColor: currentTheme.colors.borderStrong,
+      shadowColor: currentTheme.colors.shadow,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      elevation: 6,
     }}>
       <TouchableOpacity 
         onPress={() => handleSwitchAccount(item)}
@@ -193,25 +176,20 @@ const UserSwitcher = ({ visible, onClose }) => {
           width: 50,
           height: 50,
           borderRadius: 25,
-          backgroundColor: currentTheme.colors.primary,
+          backgroundColor: currentTheme.colors.snapYellow,
           justifyContent: 'center',
           alignItems: 'center',
           marginRight: 12,
+          borderWidth: 2,
+          borderColor: currentTheme.colors.snapPink,
         }}>
-          {item.profilePicture ? (
-            <Image 
-              source={{ uri: item.profilePicture }} 
-              style={{ width: 50, height: 50, borderRadius: 25 }}
-            />
-          ) : (
-            <Text style={{ 
-              fontSize: 18, 
-              fontWeight: 'bold',
-              color: currentTheme.colors.background 
-            }}>
-              {(item.displayName || item.username)?.charAt(0).toUpperCase()}
-            </Text>
-          )}
+          <Text style={{
+            fontSize: 18,
+            fontWeight: 'bold',
+            color: currentTheme.colors.textInverse,
+          }}>
+            {(item.displayName || item.username)?.charAt(0).toUpperCase()}
+          </Text>
         </View>
         
         <View style={{ flex: 1 }}>
@@ -219,6 +197,7 @@ const UserSwitcher = ({ visible, onClose }) => {
             fontSize: 16,
             fontWeight: 'bold',
             color: currentTheme.colors.text,
+            marginBottom: 2,
           }}>
             {item.displayName || item.username}
           </Text>
@@ -228,434 +207,628 @@ const UserSwitcher = ({ visible, onClose }) => {
           }}>
             {item.email}
           </Text>
-          <Text style={{
-            fontSize: 12,
-            color: currentTheme.colors.textSecondary,
-            marginTop: 2,
-          }}>
-            Last used: {new Date(item.lastUsed).toLocaleDateString()}
-          </Text>
         </View>
       </TouchableOpacity>
-
+      
       <TouchableOpacity
         onPress={() => handleRemoveAccount(item)}
         style={{
           padding: 8,
           borderRadius: 20,
-          backgroundColor: currentTheme.colors.danger,
+          backgroundColor: currentTheme.colors.error + '30',
+          borderWidth: 1,
+          borderColor: currentTheme.colors.error,
         }}
       >
-        <Ionicons name="trash" size={16} color="#ffffff" />
+        <Ionicons name="trash-outline" size={20} color={currentTheme.colors.error} />
       </TouchableOpacity>
     </View>
   );
 
+  if (!visible) return null;
+
   return (
     <Modal
       visible={visible}
-      transparent
-      animationType="fade"
+      transparent={false}
+      animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={{
+      <SafeAreaView style={{
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
+        backgroundColor: currentTheme.colors.background,
       }}>
         <View style={{
+          flex: 1,
           backgroundColor: currentTheme.colors.background,
-          borderRadius: 20,
           padding: 20,
-          width: '90%',
-          maxHeight: '80%',
-          borderWidth: 1,
-          borderColor: currentTheme.colors.border,
         }}>
           {/* Header */}
           <View style={{
             flexDirection: 'row',
-            justifyContent: 'space-between',
             alignItems: 'center',
-            marginBottom: 20,
-            paddingBottom: 15,
-            borderBottomWidth: 1,
-            borderBottomColor: currentTheme.colors.border,
+            justifyContent: 'space-between',
+            marginBottom: 24,
+            paddingBottom: 16,
+            borderBottomWidth: 2,
+            borderBottomColor: currentTheme.colors.snapYellow,
           }}>
             <Text style={{
-              fontSize: 20,
+              fontSize: 24,
               fontWeight: 'bold',
               color: currentTheme.colors.text,
             }}>
-              {showAddAccount ? (isSignUp ? 'Create Account' : 'Sign In') : 
-               showAccountList ? 'Saved Accounts' : 'Switch Account'}
+              Switch Account
             </Text>
-            <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={24} color={currentTheme.colors.text} />
+            <TouchableOpacity
+              onPress={() => {
+                console.log('📱 UserSwitcher: Close button pressed');
+                onClose();
+              }}
+              style={{
+                padding: 8,
+                borderRadius: 20,
+                backgroundColor: currentTheme.colors.error,
+                borderWidth: 2,
+                borderColor: currentTheme.colors.snapPink,
+              }}
+            >
+              <Ionicons name="close" size={24} color={currentTheme.colors.textInverse} />
             </TouchableOpacity>
           </View>
 
-          {showAddAccount ? (
-            // Add Account Form
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={{ marginBottom: 20 }}>
-                <Text style={{
-                  fontSize: 16,
-                  fontWeight: 'bold',
-                  color: currentTheme.colors.text,
-                  marginBottom: 15,
+          {/* Current User */}
+          {user && (
+            <View style={{
+              padding: 16,
+              backgroundColor: currentTheme.colors.surface,
+              borderRadius: 15,
+              borderWidth: 2,
+              borderColor: currentTheme.colors.snapYellow,
+              marginBottom: 20,
+              shadowColor: currentTheme.colors.snapYellow,
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.3,
+              shadowRadius: 8,
+              elevation: 6,
+            }}>
+              <Text style={{
+                fontSize: 16,
+                fontWeight: 'bold',
+                color: currentTheme.colors.text,
+                marginBottom: 8,
+              }}>
+                Current Account
+              </Text>
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+              }}>
+                <View style={{
+                  width: 50,
+                  height: 50,
+                  borderRadius: 25,
+                  backgroundColor: currentTheme.colors.snapPink,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  marginRight: 12,
+                  borderWidth: 2,
+                  borderColor: currentTheme.colors.snapYellow,
                 }}>
-                  {isSignUp ? 'Create a new account' : 'Sign in to existing account'}
-                </Text>
-
-                <TextInput
-                  style={{
-                    backgroundColor: currentTheme.colors.surface,
-                    borderRadius: 12,
-                    padding: 15,
-                    marginBottom: 15,
-                    fontSize: 16,
-                    color: currentTheme.colors.text,
-                    borderWidth: 1,
-                    borderColor: currentTheme.colors.border,
-                  }}
-                  placeholder="Email"
-                  placeholderTextColor={currentTheme.colors.textSecondary}
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
-
-                <TextInput
-                  style={{
-                    backgroundColor: currentTheme.colors.surface,
-                    borderRadius: 12,
-                    padding: 15,
-                    marginBottom: 15,
-                    fontSize: 16,
-                    color: currentTheme.colors.text,
-                    borderWidth: 1,
-                    borderColor: currentTheme.colors.border,
-                  }}
-                  placeholder="Password"
-                  placeholderTextColor={currentTheme.colors.textSecondary}
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                />
-
-                {isSignUp && (
-                  <TextInput
-                    style={{
-                      backgroundColor: currentTheme.colors.surface,
-                      borderRadius: 12,
-                      padding: 15,
-                      marginBottom: 15,
-                      fontSize: 16,
-                      color: currentTheme.colors.text,
-                      borderWidth: 1,
-                      borderColor: currentTheme.colors.border,
-                    }}
-                    placeholder="Username"
-                    placeholderTextColor={currentTheme.colors.textSecondary}
-                    value={username}
-                    onChangeText={setUsername}
-                    autoCapitalize="none"
-                  />
-                )}
-
-                <TouchableOpacity
-                  onPress={handleCreateAccount}
-                  disabled={loading}
-                  style={{
-                    backgroundColor: currentTheme.colors.primary,
-                    borderRadius: 12,
-                    padding: 15,
-                    alignItems: 'center',
-                    marginBottom: 15,
-                    opacity: loading ? 0.7 : 1,
-                  }}
-                >
+                  <Text style={{
+                    fontSize: 18,
+                    fontWeight: 'bold',
+                    color: currentTheme.colors.textInverse,
+                  }}>
+                    {user.email?.charAt(0)?.toUpperCase() || '?'}
+                  </Text>
+                </View>
+                <View>
                   <Text style={{
                     fontSize: 16,
                     fontWeight: 'bold',
-                    color: currentTheme.colors.background,
+                    color: currentTheme.colors.text,
                   }}>
-                    {loading ? 'Please wait...' : (isSignUp ? 'Create Account' : 'Sign In')}
+                    {user.email}
                   </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={() => setIsSignUp(!isSignUp)}
-                  style={{ alignItems: 'center', marginBottom: 15 }}
-                >
                   <Text style={{
                     fontSize: 14,
                     color: currentTheme.colors.textSecondary,
                   }}>
-                    {isSignUp ? 'Already have an account? Sign In' : 'Need an account? Sign Up'}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={() => {
-                    setShowAddAccount(false);
-                    setEmail('');
-                    setPassword('');
-                    setUsername('');
-                  }}
-                  style={{
-                    borderWidth: 1,
-                    borderColor: currentTheme.colors.border,
-                    borderRadius: 12,
-                    padding: 15,
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{
-                    fontSize: 16,
-                    color: currentTheme.colors.text,
-                  }}>
-                    Back
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          ) : showAccountList ? (
-            // Saved Accounts List
-            <View style={{ flex: 1 }}>
-              {savedAccounts.length > 0 ? (
-                <FlatList
-                  data={savedAccounts}
-                  renderItem={renderAccountItem}
-                  keyExtractor={(item) => item.email}
-                  showsVerticalScrollIndicator={false}
-                  style={{ maxHeight: 400 }}
-                />
-              ) : (
-                <View style={{
-                  alignItems: 'center',
-                  paddingVertical: 40,
-                }}>
-                  <Ionicons name="person-circle" size={64} color={currentTheme.colors.textSecondary} />
-                  <Text style={{
-                    fontSize: 16,
-                    color: currentTheme.colors.textSecondary,
-                    marginTop: 15,
-                    textAlign: 'center',
-                  }}>
-                    No saved accounts
+                    Currently signed in
                   </Text>
                 </View>
-              )}
-
-              <TouchableOpacity
-                onPress={() => setShowAccountList(false)}
-                style={{
-                  borderWidth: 1,
-                  borderColor: currentTheme.colors.border,
-                  borderRadius: 12,
-                  padding: 15,
-                  alignItems: 'center',
-                  marginTop: 15,
-                }}
-              >
-                <Text style={{
-                  fontSize: 16,
-                  color: currentTheme.colors.text,
-                }}>
-                  Back
-                </Text>
-              </TouchableOpacity>
+              </View>
             </View>
-          ) : (
-            // Main Menu
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {/* Current Account */}
-              {user && (
-                <View style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  padding: 15,
-                  backgroundColor: currentTheme.colors.surface,
-                  borderRadius: 12,
-                  marginBottom: 20,
-                  borderWidth: 2,
-                  borderColor: currentTheme.colors.primary,
-                }}>
+          )}
+
+          {/* Action Buttons */}
+          <View style={{
+            flexDirection: 'row',
+            gap: 12,
+            marginBottom: 20,
+          }}>
+            <TouchableOpacity
+              onPress={() => {
+                console.log('📱 UserSwitcher: Show account list pressed');
+                setShowAccountList(true);
+              }}
+              style={{
+                flex: 1,
+                backgroundColor: currentTheme.colors.snapYellow,
+                borderWidth: 2,
+                borderColor: currentTheme.colors.snapPink,
+                borderRadius: 15,
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                shadowColor: currentTheme.colors.snapYellow,
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.3,
+                shadowRadius: 8,
+                elevation: 6,
+              }}
+            >
+              <Text style={{
+                color: currentTheme.colors.textInverse,
+                fontWeight: 'bold',
+                fontSize: 16,
+                textAlign: 'center',
+              }}>
+                Saved Accounts
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => {
+                console.log('📱 UserSwitcher: Add account pressed');
+                setShowAddAccount(true);
+              }}
+              style={{
+                flex: 1,
+                backgroundColor: currentTheme.colors.snapPink,
+                borderWidth: 2,
+                borderColor: currentTheme.colors.snapYellow,
+                borderRadius: 15,
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                shadowColor: currentTheme.colors.snapPink,
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.3,
+                shadowRadius: 8,
+                elevation: 6,
+              }}
+            >
+              <Text style={{
+                color: currentTheme.colors.textInverse,
+                fontWeight: 'bold',
+                fontSize: 16,
+                textAlign: 'center',
+              }}>
+                Add Account
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Quick Test Users */}
+          <View style={{
+            backgroundColor: currentTheme.colors.surface,
+            borderRadius: 15,
+            borderWidth: 2,
+            borderColor: currentTheme.colors.borderStrong,
+            padding: 16,
+            shadowColor: currentTheme.colors.shadow,
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.3,
+            shadowRadius: 8,
+            elevation: 6,
+          }}>
+            <Text style={{
+              fontSize: 18,
+              fontWeight: 'bold',
+              color: currentTheme.colors.text,
+              marginBottom: 12,
+            }}>
+              Quick Login (Test Users)
+            </Text>
+            <ScrollView>
+              {testUsers.map((testUser, index) => (
+                <TouchableOpacity
+                  key={testUser.email}
+                  onPress={() => {
+                    console.log('📱 UserSwitcher: Test user selected:', testUser.email);
+                    handleSwitchAccount({
+                      email: testUser.email,
+                      username: testUser.username,
+                      displayName: testUser.displayName
+                    });
+                  }}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    padding: 12,
+                    backgroundColor: currentTheme.colors.background,
+                    marginVertical: 4,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: currentTheme.colors.border,
+                  }}
+                >
                   <View style={{
-                    width: 50,
-                    height: 50,
-                    borderRadius: 25,
-                    backgroundColor: currentTheme.colors.primary,
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: currentTheme.colors.snapYellow,
                     justifyContent: 'center',
                     alignItems: 'center',
                     marginRight: 12,
+                    borderWidth: 2,
+                    borderColor: currentTheme.colors.snapPink,
                   }}>
-                    {user.profilePicture || user.profile_picture ? (
-                      <Image 
-                        source={{ uri: user.profilePicture || user.profile_picture }} 
-                        style={{ width: 50, height: 50, borderRadius: 25 }}
-                      />
-                    ) : (
-                      <Text style={{ 
-                        fontSize: 18, 
-                        fontWeight: 'bold',
-                        color: currentTheme.colors.background 
-                      }}>
-                        {(user.username || user.email)?.charAt(0).toUpperCase()}
-                      </Text>
-                    )}
+                    <Text style={{
+                      fontSize: 16,
+                      fontWeight: 'bold',
+                      color: currentTheme.colors.textInverse,
+                    }}>
+                      {testUser.displayName.charAt(0).toUpperCase()}
+                    </Text>
                   </View>
+                  
                   <View style={{ flex: 1 }}>
                     <Text style={{
                       fontSize: 16,
                       fontWeight: 'bold',
                       color: currentTheme.colors.text,
                     }}>
-                      {user.display_name || user.username || 'Current User'}
+                      {testUser.displayName}
                     </Text>
                     <Text style={{
                       fontSize: 14,
                       color: currentTheme.colors.textSecondary,
                     }}>
-                      {user.email}
-                    </Text>
-                    <Text style={{
-                      fontSize: 12,
-                      color: currentTheme.colors.primary,
-                      marginTop: 2,
-                      fontWeight: 'bold',
-                    }}>
-                      Currently Active
+                      {testUser.email}
                     </Text>
                   </View>
-                </View>
-              )}
-
-              {/* Quick Actions */}
-              <View style={{ marginBottom: 20 }}>
-                <TouchableOpacity
-                  onPress={() => setShowAccountList(true)}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    padding: 15,
-                    backgroundColor: currentTheme.colors.surface,
-                    borderRadius: 12,
-                    marginBottom: 10,
-                    borderWidth: 1,
-                    borderColor: currentTheme.colors.border,
-                  }}
-                >
-                  <Ionicons name="list" size={24} color={currentTheme.colors.text} style={{ marginRight: 12 }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={{
-                      fontSize: 16,
-                      fontWeight: 'bold',
-                      color: currentTheme.colors.text,
-                    }}>
-                      Saved Accounts
-                    </Text>
-                    <Text style={{
-                      fontSize: 14,
-                      color: currentTheme.colors.textSecondary,
-                    }}>
-                      {savedAccounts.length} saved account{savedAccounts.length !== 1 ? 's' : ''}
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color={currentTheme.colors.textSecondary} />
+                  
+                  <Ionicons 
+                    name="chevron-forward" 
+                    size={20} 
+                    color={currentTheme.colors.textSecondary} 
+                  />
                 </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </SafeAreaView>
 
+      {/* Saved Accounts Modal */}
+      <Modal
+        visible={showAccountList}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => setShowAccountList(false)}
+      >
+        <SafeAreaView style={{
+          flex: 1,
+          backgroundColor: currentTheme.colors.background,
+        }}>
+          <View style={{
+            flex: 1,
+            backgroundColor: currentTheme.colors.background,
+            padding: 20,
+          }}>
+            {/* Header */}
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 20,
+              paddingBottom: 16,
+              borderBottomWidth: 2,
+              borderBottomColor: currentTheme.colors.snapYellow,
+            }}>
+              <Text style={{
+                fontSize: 24,
+                fontWeight: 'bold',
+                color: currentTheme.colors.text,
+              }}>
+                Saved Accounts
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  console.log('📱 UserSwitcher: Account list close pressed');
+                  setShowAccountList(false);
+                }}
+                style={{
+                  padding: 8,
+                  borderRadius: 20,
+                  backgroundColor: currentTheme.colors.error,
+                  borderWidth: 2,
+                  borderColor: currentTheme.colors.snapPink,
+                }}
+              >
+                <Ionicons name="close" size={24} color={currentTheme.colors.textInverse} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Accounts List */}
+            <FlatList
+              data={savedAccounts}
+              renderItem={renderAccountItem}
+              keyExtractor={(item) => item.email}
+              style={{ flex: 1 }}
+              showsVerticalScrollIndicator={false}
+              ListEmptyComponent={
+                <View style={{
+                  padding: 40,
+                  alignItems: 'center',
+                }}>
+                  <Text style={{
+                    fontSize: 18,
+                    fontWeight: 'bold',
+                    color: currentTheme.colors.text,
+                    marginBottom: 8,
+                  }}>
+                    No Saved Accounts
+                  </Text>
+                  <Text style={{
+                    fontSize: 14,
+                    color: currentTheme.colors.textSecondary,
+                    textAlign: 'center',
+                  }}>
+                    Add an account to switch between multiple users
+                  </Text>
+                </View>
+              }
+            />
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Add Account Modal */}
+      <Modal
+        visible={showAddAccount}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => setShowAddAccount(false)}
+      >
+        <SafeAreaView style={{
+          flex: 1,
+          backgroundColor: currentTheme.colors.background,
+        }}>
+          <View style={{
+            flex: 1,
+            backgroundColor: currentTheme.colors.background,
+            padding: 20,
+          }}>
+            {/* Header */}
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 20,
+              paddingBottom: 16,
+              borderBottomWidth: 2,
+              borderBottomColor: currentTheme.colors.snapYellow,
+            }}>
+              <Text style={{
+                fontSize: 24,
+                fontWeight: 'bold',
+                color: currentTheme.colors.text,
+              }}>
+                {isSignUp ? 'Create Account' : 'Add Account'}
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  console.log('📱 UserSwitcher: Add account close pressed');
+                  setShowAddAccount(false);
+                  setEmail('');
+                  setPassword('');
+                  setUsername('');
+                  setIsSignUp(false);
+                }}
+                style={{
+                  padding: 8,
+                  borderRadius: 20,
+                  backgroundColor: currentTheme.colors.error,
+                  borderWidth: 2,
+                  borderColor: currentTheme.colors.snapPink,
+                }}
+              >
+                <Ionicons name="close" size={24} color={currentTheme.colors.textInverse} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ flex: 1 }}>
+              {/* Auth Toggle */}
+              <View style={{
+                flexDirection: 'row',
+                backgroundColor: currentTheme.colors.surface,
+                borderRadius: 15,
+                borderWidth: 2,
+                borderColor: currentTheme.colors.borderStrong,
+                marginBottom: 20,
+                padding: 4,
+              }}>
                 <TouchableOpacity
-                  onPress={() => setShowAddAccount(true)}
+                  onPress={() => {
+                    console.log('📱 UserSwitcher: Switch to login');
+                    setIsSignUp(false);
+                  }}
                   style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    padding: 15,
-                    backgroundColor: currentTheme.colors.primary,
+                    flex: 1,
+                    paddingVertical: 12,
+                    paddingHorizontal: 16,
                     borderRadius: 12,
-                    marginBottom: 15,
+                    backgroundColor: !isSignUp ? currentTheme.colors.snapYellow : 'transparent',
                   }}
                 >
-                  <Ionicons name="add" size={24} color={currentTheme.colors.background} style={{ marginRight: 12 }} />
                   <Text style={{
-                    fontSize: 16,
+                    textAlign: 'center',
                     fontWeight: 'bold',
-                    color: currentTheme.colors.background,
+                    color: !isSignUp ? currentTheme.colors.textInverse : currentTheme.colors.text,
                   }}>
-                    Add Account
+                    Sign In
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  onPress={() => {
+                    console.log('📱 UserSwitcher: Switch to signup');
+                    setIsSignUp(true);
+                  }}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 12,
+                    paddingHorizontal: 16,
+                    borderRadius: 12,
+                    backgroundColor: isSignUp ? currentTheme.colors.snapPink : 'transparent',
+                  }}
+                >
+                  <Text style={{
+                    textAlign: 'center',
+                    fontWeight: 'bold',
+                    color: isSignUp ? currentTheme.colors.textInverse : currentTheme.colors.text,
+                  }}>
+                    Sign Up
                   </Text>
                 </TouchableOpacity>
               </View>
 
-              {/* Test Accounts */}
-              <View style={{ marginBottom: 20 }}>
-                <Text style={{
-                  fontSize: 16,
-                  fontWeight: 'bold',
-                  color: currentTheme.colors.text,
-                  marginBottom: 10,
-                }}>
-                  Quick Test Accounts
-                </Text>
-                {testUsers.map((testUser) => (
-                  <TouchableOpacity
-                    key={testUser.email}
-                    onPress={() => handleSwitchAccount(testUser)}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      padding: 12,
-                      backgroundColor: currentTheme.colors.surface,
-                      borderRadius: 8,
-                      marginBottom: 8,
-                      borderWidth: 1,
-                      borderColor: currentTheme.colors.border,
+              {/* Form Fields */}
+              <View style={{ gap: 16 }}>
+                <View>
+                  <Text style={{
+                    fontSize: 16,
+                    fontWeight: 'bold',
+                    color: currentTheme.colors.text,
+                    marginBottom: 8,
+                  }}>
+                    Email
+                  </Text>
+                  <TextInput
+                    value={email}
+                    onChangeText={(text) => {
+                      console.log('📱 UserSwitcher: Email changed');
+                      setEmail(text);
                     }}
-                  >
-                    <View style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 20,
-                      backgroundColor: currentTheme.colors.primary,
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      marginRight: 12,
+                    placeholder="Enter your email"
+                    placeholderTextColor={currentTheme.colors.textTertiary}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    style={{
+                      backgroundColor: currentTheme.colors.surface,
+                      borderWidth: 2,
+                      borderColor: currentTheme.colors.borderStrong,
+                      borderRadius: 12,
+                      paddingHorizontal: 16,
+                      paddingVertical: 12,
+                      fontSize: 16,
+                      color: currentTheme.colors.text,
+                    }}
+                  />
+                </View>
+
+                <View>
+                  <Text style={{
+                    fontSize: 16,
+                    fontWeight: 'bold',
+                    color: currentTheme.colors.text,
+                    marginBottom: 8,
+                  }}>
+                    Password
+                  </Text>
+                  <TextInput
+                    value={password}
+                    onChangeText={(text) => {
+                      console.log('📱 UserSwitcher: Password changed');
+                      setPassword(text);
+                    }}
+                    placeholder="Enter your password"
+                    placeholderTextColor={currentTheme.colors.textTertiary}
+                    secureTextEntry
+                    style={{
+                      backgroundColor: currentTheme.colors.surface,
+                      borderWidth: 2,
+                      borderColor: currentTheme.colors.borderStrong,
+                      borderRadius: 12,
+                      paddingHorizontal: 16,
+                      paddingVertical: 12,
+                      fontSize: 16,
+                      color: currentTheme.colors.text,
+                    }}
+                  />
+                </View>
+
+                {isSignUp && (
+                  <View>
+                    <Text style={{
+                      fontSize: 16,
+                      fontWeight: 'bold',
+                      color: currentTheme.colors.text,
+                      marginBottom: 8,
                     }}>
-                      <Text style={{
+                      Username
+                    </Text>
+                    <TextInput
+                      value={username}
+                      onChangeText={(text) => {
+                        console.log('📱 UserSwitcher: Username changed');
+                        setUsername(text);
+                      }}
+                      placeholder="Choose a username"
+                      placeholderTextColor={currentTheme.colors.textTertiary}
+                      autoCapitalize="none"
+                      style={{
+                        backgroundColor: currentTheme.colors.surface,
+                        borderWidth: 2,
+                        borderColor: currentTheme.colors.borderStrong,
+                        borderRadius: 12,
+                        paddingHorizontal: 16,
+                        paddingVertical: 12,
                         fontSize: 16,
-                        fontWeight: 'bold',
-                        color: currentTheme.colors.background,
-                      }}>
-                        {testUser.displayName.charAt(0)}
-                      </Text>
-                    </View>
-                    <View>
-                      <Text style={{
-                        fontSize: 14,
-                        fontWeight: 'bold',
                         color: currentTheme.colors.text,
-                      }}>
-                        {testUser.displayName}
-                      </Text>
-                      <Text style={{
-                        fontSize: 12,
-                        color: currentTheme.colors.textSecondary,
-                      }}>
-                        {testUser.email}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
+                      }}
+                    />
+                  </View>
+                )}
               </View>
+
+              {/* Submit Button */}
+              <TouchableOpacity
+                onPress={() => {
+                  console.log('📱 UserSwitcher: Submit button pressed');
+                  handleCreateAccount();
+                }}
+                disabled={loading || !email || !password || (isSignUp && !username)}
+                style={{
+                  backgroundColor: currentTheme.colors.snapYellow,
+                  borderWidth: 2,
+                  borderColor: currentTheme.colors.snapPink,
+                  borderRadius: 15,
+                  paddingVertical: 16,
+                  marginTop: 32,
+                  opacity: (loading || !email || !password || (isSignUp && !username)) ? 0.5 : 1,
+                  shadowColor: currentTheme.colors.snapYellow,
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 8,
+                  elevation: 6,
+                }}
+              >
+                <Text style={{
+                  color: currentTheme.colors.textInverse,
+                  fontWeight: 'bold',
+                  fontSize: 18,
+                  textAlign: 'center',
+                }}>
+                  {loading ? 'Please wait...' : (isSignUp ? 'Create Account' : 'Sign In')}
+                </Text>
+              </TouchableOpacity>
             </ScrollView>
-          )}
-        </View>
-      </View>
+          </View>
+        </SafeAreaView>
+      </Modal>
     </Modal>
   );
 };

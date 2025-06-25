@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '../../supabase.config';
+import { useSupabaseAuthStore } from './supabaseAuthStore';
 
 export const useSupabaseFriendStore = create((set, get) => ({
   friends: [],
@@ -118,69 +119,74 @@ export const useSupabaseFriendStore = create((set, get) => ({
   },
 
   // Accept friend request
-  acceptFriendRequest: async (requestId) => {
+  acceptFriendRequest: async (requestId, requesterId) => {
     try {
       set({ loading: true, error: null });
       
-      // Get current user from Supabase auth
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      const authState = useSupabaseAuthStore.getState();
+      const currentUserId = authState.user?.uid || authState.user?.id;
       
-      if (authError || !user) {
-        console.error('🟢 SupabaseFriendStore: No authenticated user found:', authError);
+      if (!currentUserId) {
         set({ error: 'User not authenticated', loading: false });
         return;
       }
 
-      // Get the friend request details
-      const { data: request, error: requestError } = await supabase
-        .from('friend_requests')
-        .select('*')
-        .eq('id', requestId)
-        .eq('requested_id', user.id)
-        .single();
+      console.log('🟢 SupabaseFriendStore: Accepting friend request:', requestId, 'from:', requesterId);
 
-      if (requestError) {
-        console.error('🟢 SupabaseFriendStore: Error getting friend request:', requestError);
-        set({ error: 'Friend request not found', loading: false });
-        return;
+      // First, check if friendship already exists to avoid duplicate key error
+      const { data: existingFriendship, error: checkError } = await supabase
+        .from('friendships')
+        .select('id')
+        .or(`and(user_id.eq.${currentUserId},friend_id.eq.${requesterId}),and(user_id.eq.${requesterId},friend_id.eq.${currentUserId})`)
+        .limit(1);
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.error('🟢 SupabaseFriendStore: Error checking existing friendship:', checkError);
       }
 
-      const requesterId = request.requester_id;
-      
-      // Start a transaction to add friends and remove request
-      const { error: friendError1 } = await supabase
-        .from('friendships')
-        .insert({
-          user_id: user.id,
-          friend_id: requesterId,
-          created_at: new Date().toISOString(),
-        });
+      // Only create friendships if they don't already exist
+      if (!existingFriendship || existingFriendship.length === 0) {
+        // Create bidirectional friendship
+        const { error: friendError1 } = await supabase
+          .from('friendships')
+          .insert({ user_id: currentUserId, friend_id: requesterId });
 
-      const { error: friendError2 } = await supabase
-        .from('friendships')
-        .insert({
-          user_id: requesterId,
-          friend_id: user.id,
-          created_at: new Date().toISOString(),
-        });
+        const { error: friendError2 } = await supabase
+          .from('friendships')
+          .insert({ user_id: requesterId, friend_id: currentUserId });
 
-      // Remove the friend request
-      const { error: deleteError } = await supabase
+        if (friendError1 || friendError2) {
+          console.error('🟢 SupabaseFriendStore: acceptFriendRequest friendship creation errors:', {
+            friendError1,
+            friendError2
+          });
+          
+          // Only set error if it's not a duplicate key violation
+          if (friendError1?.code !== '23505' && friendError2?.code !== '23505') {
+            set({ error: 'Failed to create friendship', loading: false });
+            return;
+          }
+        }
+      }
+
+      // Delete the friend request
+      const { error: requestError } = await supabase
         .from('friend_requests')
         .delete()
         .eq('id', requestId);
 
-      if (friendError1 || friendError2 || deleteError) {
-        console.error('🟢 SupabaseFriendStore: acceptFriendRequest error:', { friendError1, friendError2, deleteError });
-        set({ error: 'Failed to accept friend request', loading: false });
-        return;
+      if (requestError) {
+        console.error('🟢 SupabaseFriendStore: acceptFriendRequest request deletion error:', requestError);
+        // Don't fail the whole operation if request deletion fails
       }
 
       console.log('🟢 SupabaseFriendStore: Friend request accepted successfully');
-      set({ loading: false });
       
-      // Refresh friends list
-      get().getFriends(user.id);
+      // Refresh the friend requests and friends lists
+      await get().getFriendRequests(currentUserId);
+      await get().getFriends(currentUserId);
+      
+      set({ loading: false });
       
     } catch (error) {
       console.error('🟢 SupabaseFriendStore: acceptFriendRequest error:', error);

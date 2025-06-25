@@ -10,6 +10,9 @@ import {
   ActivityIndicator,
   Pressable,
   Animated,
+  Modal,
+  FlatList,
+  Image,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +21,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useSupabaseSnapStore as useSnapStore } from '../stores/supabaseSnapStore';
 import { useSupabaseFriendStore as useFriendStore } from '../stores/supabaseFriendStore';
 import { useSupabaseAuthStore as useAuthStore } from '../stores/supabaseAuthStore';
+import { useThemeStore } from '../stores/themeStore';
 
 const { width, height } = Dimensions.get('window');
 
@@ -26,6 +30,7 @@ export default function CameraScreen({ navigation, route }) {
   const { sendStory, sendSnap } = useSnapStore();
   const { friends, getFriends } = useFriendStore();
   const { user } = useAuthStore();
+  const { currentTheme } = useThemeStore();
   
   // Get recipient info from route params if coming from chat
   const recipientInfo = route?.params || {};
@@ -40,6 +45,9 @@ export default function CameraScreen({ navigation, route }) {
   const recordingTimeout = useRef(null);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
+  const [showFriendsList, setShowFriendsList] = useState(false);
+  const [capturedMedia, setCapturedMedia] = useState(null);
+  const [mediaType, setMediaType] = useState(null);
 
   useEffect(() => {
     getMediaLibraryPermissions();
@@ -428,6 +436,69 @@ export default function CameraScreen({ navigation, route }) {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const renderFriendItem = ({ item }) => (
+    <TouchableOpacity
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+        backgroundColor: currentTheme.colors.surface,
+        marginVertical: 4,
+        marginHorizontal: 16,
+        borderRadius: 15,
+        borderWidth: 2,
+        borderColor: currentTheme.colors.borderStrong,
+        shadowColor: currentTheme.colors.shadow,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
+      }}
+      onPress={() => {
+        setShowFriendsList(false);
+        handleSendSnap(item.id, capturedMedia, mediaType);
+      }}
+    >
+      <View style={{
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        backgroundColor: currentTheme.colors.snapPink,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+        borderWidth: 2,
+        borderColor: currentTheme.colors.snapYellow,
+      }}>
+        <Text style={{
+          fontSize: 18,
+          fontWeight: 'bold',
+          color: currentTheme.colors.textInverse,
+        }}>
+          {item.displayName?.charAt(0).toUpperCase()}
+        </Text>
+      </View>
+      
+      <View style={{ flex: 1 }}>
+        <Text style={{
+          fontSize: 16,
+          fontWeight: 'bold',
+          color: currentTheme.colors.text,
+        }}>
+          {item.displayName}
+        </Text>
+        <Text style={{
+          fontSize: 14,
+          color: currentTheme.colors.textSecondary,
+        }}>
+          @{item.username}
+        </Text>
+      </View>
+      
+      <Ionicons name="send" size={24} color={currentTheme.colors.snapYellow} />
+    </TouchableOpacity>
+  );
+
   // Loading permissions state
   if (!permission) {
     return (
@@ -598,6 +669,99 @@ export default function CameraScreen({ navigation, route }) {
           </View>
         )}
       </View>
+
+      {/* Friends List Modal */}
+      <Modal
+        visible={showFriendsList}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowFriendsList(false)}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: currentTheme.colors.modalOverlay,
+          justifyContent: 'flex-end',
+        }}>
+          <View style={{
+            backgroundColor: currentTheme.colors.modalBackground,
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+            padding: 20,
+            maxHeight: '70%',
+            borderWidth: 3,
+            borderColor: currentTheme.colors.snapYellow,
+            shadowColor: currentTheme.colors.snapYellow,
+            shadowOffset: { width: 0, height: -8 },
+            shadowOpacity: 0.4,
+            shadowRadius: 16,
+            elevation: 16,
+          }}>
+            {/* Header */}
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 20,
+              paddingBottom: 16,
+              borderBottomWidth: 2,
+              borderBottomColor: currentTheme.colors.borderStrong,
+            }}>
+              <Text style={{
+                fontSize: 20,
+                fontWeight: 'bold',
+                color: currentTheme.colors.text,
+              }}>
+                Send Snap To
+              </Text>
+              <TouchableOpacity 
+                onPress={() => setShowFriendsList(false)}
+                style={{
+                  padding: 8,
+                  borderRadius: 20,
+                  backgroundColor: currentTheme.colors.error + '20',
+                  borderWidth: 1,
+                  borderColor: currentTheme.colors.error,
+                }}
+              >
+                <Ionicons name="close" size={24} color={currentTheme.colors.error} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Friends List */}
+            <FlatList
+              data={friends}
+              renderItem={renderFriendItem}
+              keyExtractor={(item) => item.id}
+              showsVerticalScrollIndicator={false}
+              ListEmptyComponent={
+                <View style={{
+                  alignItems: 'center',
+                  paddingVertical: 40,
+                }}>
+                  <Ionicons name="people" size={64} color={currentTheme.colors.textTertiary} />
+                  <Text style={{
+                    fontSize: 18,
+                    fontWeight: 'bold',
+                    color: currentTheme.colors.text,
+                    marginTop: 16,
+                    textAlign: 'center',
+                  }}>
+                    No Friends Yet
+                  </Text>
+                  <Text style={{
+                    fontSize: 14,
+                    color: currentTheme.colors.textSecondary,
+                    marginTop: 8,
+                    textAlign: 'center',
+                  }}>
+                    Add friends to send snaps to them
+                  </Text>
+                </View>
+              }
+            />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

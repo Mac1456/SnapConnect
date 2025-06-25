@@ -288,10 +288,10 @@ export default function HomeScreen({ navigation }) {
   );
 
   return (
-    <LinearGradient
-      colors={currentTheme.colors.background}
-      className="flex-1"
-    >
+          <LinearGradient
+        colors={currentTheme.colors.backgroundGradient || ['#FFFFFF', '#F8F9FA']}
+        className="flex-1"
+      >
       <SafeAreaView className="flex-1">
         {/* Header */}
         <View className="flex-row items-center justify-between px-4 py-3">
@@ -435,31 +435,38 @@ export default function HomeScreen({ navigation }) {
         {/* Friend Search Modal */}
         <Modal
           visible={showFriendSearch}
-          transparent
+          transparent={false}
           animationType="slide"
           onRequestClose={() => setShowFriendSearch(false)}
         >
           <View style={{
             flex: 1,
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            justifyContent: 'flex-end',
+            backgroundColor: currentTheme.colors.background,
+            paddingTop: 60, // Add top padding to move content higher
           }}>
             <View style={{
+              flex: 1,
               backgroundColor: currentTheme.colors.background,
-              borderTopLeftRadius: 20,
-              borderTopRightRadius: 20,
+              borderRadius: 20,
               padding: 20,
-              maxHeight: '80%',
+              borderWidth: 3,
+              borderColor: currentTheme.colors.snapYellow,
+              shadowColor: currentTheme.colors.snapYellow,
+              shadowOffset: { width: 0, height: -8 },
+              shadowOpacity: 0.4,
+              shadowRadius: 16,
+              elevation: 16,
+              margin: 10,
             }}>
               {/* Header */}
               <View style={{
                 flexDirection: 'row',
-                justifyContent: 'space-between',
                 alignItems: 'center',
+                justifyContent: 'space-between',
                 marginBottom: 20,
-                paddingBottom: 15,
-                borderBottomWidth: 1,
-                borderBottomColor: currentTheme.colors.border,
+                paddingBottom: 16,
+                borderBottomWidth: 2,
+                borderBottomColor: currentTheme.colors.borderStrong,
               }}>
                 <Text style={{
                   fontSize: 20,
@@ -468,125 +475,253 @@ export default function HomeScreen({ navigation }) {
                 }}>
                   Find Friends
                 </Text>
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  <TouchableOpacity 
-                    onPress={() => {
-                      setShowFriendSearch(false);
-                      navigation.navigate('FindFriends');
-                    }}
-                    style={{
-                      backgroundColor: currentTheme.colors.primary,
-                      borderRadius: 20,
-                      paddingHorizontal: 12,
-                      paddingVertical: 6,
-                    }}
-                  >
-                    <Text style={{
-                      color: currentTheme.colors.background,
-                      fontWeight: 'bold',
-                      fontSize: 12,
-                    }}>
-                      More Options
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => setShowFriendSearch(false)}>
-                    <Ionicons name="close" size={24} color={currentTheme.colors.text} />
-                  </TouchableOpacity>
-                </View>
+                <TouchableOpacity 
+                  onPress={() => {
+                    console.log('🏠 HomeScreen: Friend search modal closed');
+                    setShowFriendSearch(false);
+                  }}
+                  style={{
+                    padding: 8,
+                    borderRadius: 20,
+                    backgroundColor: currentTheme.colors.error,
+                    borderWidth: 2,
+                    borderColor: currentTheme.colors.snapPink,
+                  }}
+                >
+                  <Ionicons name="close" size={24} color={currentTheme.colors.textInverse} />
+                </TouchableOpacity>
               </View>
 
               {/* Search Input */}
               <View style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                backgroundColor: currentTheme.colors.surface,
-                borderRadius: 25,
-                paddingHorizontal: 15,
-                marginBottom: 15,
-                borderWidth: 1,
-                borderColor: currentTheme.colors.border,
+                marginBottom: 20,
               }}>
-                <Ionicons name="search" size={20} color={currentTheme.colors.textSecondary} />
-                <TextInput
-                  value={searchQuery}
-                  onChangeText={(text) => {
-                    setSearchQuery(text);
-                    if (text.trim()) {
-                      setTimeout(() => handleSearch(), 300);
-                    } else {
-                      setSearchResults([]);
-                    }
+                <View style={{
+                  flex: 1,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: currentTheme.colors.surface,
+                  borderRadius: 15,
+                  borderWidth: 2,
+                  borderColor: currentTheme.colors.borderStrong,
+                  paddingHorizontal: 16,
+                  paddingVertical: 12,
+                  marginRight: 12,
+                  shadowColor: currentTheme.colors.shadow,
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 8,
+                  elevation: 6,
+                }}>
+                  <Ionicons 
+                    name="search" 
+                    size={20} 
+                    color={currentTheme.colors.textSecondary} 
+                    style={{ marginRight: 12 }}
+                  />
+                  <TextInput
+                    value={searchQuery}
+                    onChangeText={(text) => {
+                      console.log('🏠 HomeScreen: Search query changed:', text);
+                      setSearchQuery(text);
+                    }}
+                    placeholder="Search by username or email..."
+                    placeholderTextColor={currentTheme.colors.textTertiary}
+                    style={{
+                      flex: 1,
+                      fontSize: 16,
+                      color: currentTheme.colors.text,
+                    }}
+                    onSubmitEditing={() => {
+                      console.log('🏠 HomeScreen: Search submitted');
+                      handleSearch();
+                    }}
+                    returnKeyType="search"
+                    autoFocus={true}
+                  />
+                </View>
+                
+                <TouchableOpacity
+                  onPress={() => {
+                    console.log('🏠 HomeScreen: Search button pressed');
+                    handleSearch();
                   }}
-                  placeholder="Search friends..."
-                  placeholderTextColor={currentTheme.colors.textSecondary}
+                  disabled={loading || !searchQuery.trim()}
                   style={{
-                    flex: 1,
+                    backgroundColor: currentTheme.colors.snapYellow,
+                    borderWidth: 2,
+                    borderColor: currentTheme.colors.snapPink,
+                    borderRadius: 15,
+                    paddingHorizontal: 20,
                     paddingVertical: 12,
-                    paddingHorizontal: 10,
-                    fontSize: 16,
-                    color: currentTheme.colors.text,
+                    opacity: (loading || !searchQuery.trim()) ? 0.5 : 1,
+                    shadowColor: currentTheme.colors.snapYellow,
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.4,
+                    shadowRadius: 8,
+                    elevation: 8,
                   }}
-                />
-                {searchQuery.length > 0 && (
-                  <TouchableOpacity onPress={() => {
-                    setSearchQuery('');
-                    setSearchResults([]);
+                >
+                  <Text style={{
+                    color: currentTheme.colors.textInverse,
+                    fontWeight: 'bold',
+                    fontSize: 16,
                   }}>
-                    <Ionicons name="close-circle" size={20} color={currentTheme.colors.textSecondary} />
-                  </TouchableOpacity>
-                )}
+                    {loading ? 'Searching...' : 'Search'}
+                  </Text>
+                </TouchableOpacity>
               </View>
 
               {/* Search Results */}
-              {searchQuery.trim() ? (
-                <FlatList
-                  data={searchResults}
-                  renderItem={renderSearchResult}
-                  keyExtractor={(item) => item.id}
-                  style={{ maxHeight: 400 }}
-                  contentContainerStyle={{ paddingBottom: 20 }}
-                  ListEmptyComponent={() => (
+              <FlatList
+                data={searchResults}
+                keyExtractor={(item) => item.id}
+                showsVerticalScrollIndicator={false}
+                style={{ flex: 1 }}
+                renderItem={({ item }) => (
+                  <View style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    padding: 16,
+                    backgroundColor: currentTheme.colors.surface,
+                    marginVertical: 4,
+                    borderRadius: 15,
+                    borderWidth: 2,
+                    borderColor: currentTheme.colors.borderStrong,
+                    shadowColor: currentTheme.colors.shadow,
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.3,
+                    shadowRadius: 8,
+                    elevation: 6,
+                  }}>
                     <View style={{
+                      width: 50,
+                      height: 50,
+                      borderRadius: 25,
+                      backgroundColor: currentTheme.colors.snapPink,
+                      justifyContent: 'center',
                       alignItems: 'center',
-                      paddingVertical: 40,
+                      marginRight: 12,
+                      borderWidth: 2,
+                      borderColor: currentTheme.colors.snapYellow,
                     }}>
-                      <Ionicons name="search" size={64} color={currentTheme.colors.textSecondary} />
+                      <Text style={{
+                        fontSize: 18,
+                        fontWeight: 'bold',
+                        color: currentTheme.colors.textInverse,
+                      }}>
+                        {item.displayName?.charAt(0)?.toUpperCase() || item.username?.charAt(0)?.toUpperCase() || '?'}
+                      </Text>
+                    </View>
+                    
+                    <View style={{ flex: 1 }}>
+                      <Text style={{
+                        fontSize: 16,
+                        fontWeight: 'bold',
+                        color: currentTheme.colors.text,
+                        marginBottom: 2,
+                      }}>
+                        {item.displayName || item.username}
+                      </Text>
+                      <Text style={{
+                        fontSize: 14,
+                        color: currentTheme.colors.textSecondary,
+                      }}>
+                        @{item.username}
+                      </Text>
+                    </View>
+                    
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          console.log('🏠 HomeScreen: Sending friend request to:', item.username);
+                          handleSendFriendRequest(item);
+                        }}
+                        style={{
+                          backgroundColor: currentTheme.colors.snapYellow,
+                          borderWidth: 2,
+                          borderColor: currentTheme.colors.snapPink,
+                          borderRadius: 12,
+                          paddingHorizontal: 12,
+                          paddingVertical: 6,
+                          shadowColor: currentTheme.colors.snapYellow,
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: 0.3,
+                          shadowRadius: 4,
+                          elevation: 4,
+                        }}
+                      >
+                        <Text style={{
+                          color: currentTheme.colors.textInverse,
+                          fontWeight: 'bold',
+                          fontSize: 12,
+                        }}>
+                          Add Friend
+                        </Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity
+                        onPress={() => {
+                          console.log('🏠 HomeScreen: Opening chat with:', item.username);
+                          handleSendMessage(item);
+                        }}
+                        style={{
+                          backgroundColor: currentTheme.colors.snapPink,
+                          borderWidth: 2,
+                          borderColor: currentTheme.colors.snapYellow,
+                          borderRadius: 12,
+                          paddingHorizontal: 12,
+                          paddingVertical: 6,
+                          shadowColor: currentTheme.colors.snapPink,
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: 0.3,
+                          shadowRadius: 4,
+                          elevation: 4,
+                        }}
+                      >
+                        <Text style={{
+                          color: currentTheme.colors.textInverse,
+                          fontWeight: 'bold',
+                          fontSize: 12,
+                        }}>
+                          Message
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+                ListEmptyComponent={
+                  searchQuery.trim() ? (
+                    <View style={{
+                      padding: 40,
+                      alignItems: 'center',
+                    }}>
                       <Text style={{
                         fontSize: 16,
                         color: currentTheme.colors.textSecondary,
-                        marginTop: 15,
                         textAlign: 'center',
                       }}>
-                        {loading ? 'Searching...' : 'No users found'}
+                        No users found for "{searchQuery}"
                       </Text>
                     </View>
-                  )}
-                />
-              ) : (
-                <View style={{
-                  alignItems: 'center',
-                  paddingVertical: 40,
-                }}>
-                  <Ionicons name="people" size={64} color={currentTheme.colors.textSecondary} />
-                  <Text style={{
-                    fontSize: 18,
-                    fontWeight: 'bold',
-                    color: currentTheme.colors.text,
-                    marginTop: 15,
-                    textAlign: 'center',
-                  }}>
-                    Quick Friend Search
-                  </Text>
-                  <Text style={{
-                    fontSize: 16,
-                    color: currentTheme.colors.textSecondary,
-                    marginTop: 8,
-                    textAlign: 'center',
-                  }}>
-                    Search for friends and send requests, messages, or snaps
-                  </Text>
-                </View>
-              )}
+                  ) : (
+                    <View style={{
+                      padding: 40,
+                      alignItems: 'center',
+                    }}>
+                      <Text style={{
+                        fontSize: 16,
+                        color: currentTheme.colors.textSecondary,
+                        textAlign: 'center',
+                      }}>
+                        Search for friends by username or email
+                      </Text>
+                    </View>
+                  )
+                }
+              />
             </View>
           </View>
         </Modal>

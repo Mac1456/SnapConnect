@@ -161,19 +161,24 @@ const FindFriendsScreen = ({ navigation }) => {
     <View style={{
       flexDirection: 'row',
       alignItems: 'center',
-      padding: 15,
-      backgroundColor: currentTheme.colors.surface,
-      marginHorizontal: 15,
-      marginVertical: 5,
+      padding: 16,
+      backgroundColor: currentTheme.colors.surfaceElevated,
+      marginHorizontal: 16,
+      marginVertical: 6,
       borderRadius: 12,
       borderWidth: 1,
       borderColor: currentTheme.colors.border,
+      shadowColor: currentTheme.colors.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 2,
     }}>
       <View style={{
         width: 50,
         height: 50,
         borderRadius: 25,
-        backgroundColor: currentTheme.colors.primary,
+        backgroundColor: currentTheme.colors.snapYellow,
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 12,
@@ -187,7 +192,7 @@ const FindFriendsScreen = ({ navigation }) => {
           <Text style={{ 
             fontSize: 18, 
             fontWeight: 'bold',
-            color: currentTheme.colors.background 
+            color: currentTheme.colors.textInverse 
           }}>
             {(item.username || item.displayName)?.charAt(0).toUpperCase()}
           </Text>
@@ -199,6 +204,7 @@ const FindFriendsScreen = ({ navigation }) => {
           fontSize: 16,
           fontWeight: 'bold',
           color: currentTheme.colors.text,
+          marginBottom: 2,
         }}>
           {item.displayName}
         </Text>
@@ -209,25 +215,42 @@ const FindFriendsScreen = ({ navigation }) => {
           @{item.username}
         </Text>
       </View>
-
+      
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <TouchableOpacity
-          onPress={() => handleSendFriendRequest(item)}
-          disabled={loading}
+          onPress={() => handleSendMessage(item)}
           style={{
-            backgroundColor: currentTheme.colors.primary,
-            borderRadius: 20,
+            backgroundColor: currentTheme.colors.snapPurple,
             paddingHorizontal: 12,
-            paddingVertical: 6,
+            paddingVertical: 8,
+            borderRadius: 20,
           }}
         >
-          <Text style={{
-            color: currentTheme.colors.background,
-            fontWeight: 'bold',
-            fontSize: 12,
-          }}>
-            Add Friend
-          </Text>
+          <Ionicons name="chatbubble" size={16} color="white" />
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          onPress={() => handleSendSnap(item)}
+          style={{
+            backgroundColor: currentTheme.colors.snapPink,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            borderRadius: 20,
+          }}
+        >
+          <Ionicons name="camera" size={16} color="white" />
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          onPress={() => handleSendFriendRequest(item)}
+          style={{
+            backgroundColor: currentTheme.colors.snapYellow,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            borderRadius: 20,
+          }}
+        >
+          <Ionicons name="person-add" size={16} color={currentTheme.colors.textInverse} />
         </TouchableOpacity>
       </View>
     </View>
@@ -237,27 +260,32 @@ const FindFriendsScreen = ({ navigation }) => {
     <View style={{
       flexDirection: 'row',
       alignItems: 'center',
-      padding: 15,
-      backgroundColor: currentTheme.colors.surface,
-      marginHorizontal: 15,
-      marginVertical: 5,
+      padding: 16,
+      backgroundColor: currentTheme.colors.surfaceElevated,
+      marginHorizontal: 16,
+      marginVertical: 6,
       borderRadius: 12,
       borderWidth: 1,
       borderColor: currentTheme.colors.border,
+      shadowColor: currentTheme.colors.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 2,
     }}>
       <View style={{
         width: 50,
         height: 50,
         borderRadius: 25,
-        backgroundColor: currentTheme.colors.primary,
+        backgroundColor: currentTheme.colors.snapYellow,
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 12,
       }}>
-        <Text style={{ 
-          fontSize: 18, 
+        <Text style={{
+          fontSize: 18,
           fontWeight: 'bold',
-          color: currentTheme.colors.background 
+          color: currentTheme.colors.textInverse,
         }}>
           {item.requester_username?.charAt(0).toUpperCase()}
         </Text>
@@ -268,54 +296,41 @@ const FindFriendsScreen = ({ navigation }) => {
           fontSize: 16,
           fontWeight: 'bold',
           color: currentTheme.colors.text,
+          marginBottom: 2,
         }}>
-          @{item.requester_username}
+          {item.requester_username}
         </Text>
         <Text style={{
-          fontSize: 12,
+          fontSize: 14,
           color: currentTheme.colors.textSecondary,
         }}>
-          {new Date(item.created_at).toLocaleDateString()}
+          Wants to be friends
         </Text>
       </View>
-
+      
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <TouchableOpacity
           onPress={() => handleAcceptRequest(item)}
-          disabled={loading}
           style={{
-            backgroundColor: '#4CAF50',
+            backgroundColor: currentTheme.colors.success,
+            paddingHorizontal: 16,
+            paddingVertical: 8,
             borderRadius: 20,
-            paddingHorizontal: 12,
-            paddingVertical: 6,
           }}
         >
-          <Text style={{
-            color: '#ffffff',
-            fontWeight: 'bold',
-            fontSize: 12,
-          }}>
-            Accept
-          </Text>
+          <Text style={{ color: 'white', fontWeight: 'bold' }}>Accept</Text>
         </TouchableOpacity>
         
         <TouchableOpacity
           onPress={() => handleRejectRequest(item)}
-          disabled={loading}
           style={{
-            backgroundColor: '#f44336',
+            backgroundColor: currentTheme.colors.error,
+            paddingHorizontal: 16,
+            paddingVertical: 8,
             borderRadius: 20,
-            paddingHorizontal: 12,
-            paddingVertical: 6,
           }}
         >
-          <Text style={{
-            color: '#ffffff',
-            fontWeight: 'bold',
-            fontSize: 12,
-          }}>
-            Decline
-          </Text>
+          <Text style={{ color: 'white', fontWeight: 'bold' }}>Decline</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -325,35 +340,40 @@ const FindFriendsScreen = ({ navigation }) => {
     <View style={{
       flexDirection: 'row',
       alignItems: 'center',
-      padding: 15,
-      backgroundColor: currentTheme.colors.surface,
-      marginHorizontal: 15,
-      marginVertical: 5,
+      padding: 16,
+      backgroundColor: currentTheme.colors.surfaceElevated,
+      marginHorizontal: 16,
+      marginVertical: 6,
       borderRadius: 12,
       borderWidth: 1,
       borderColor: currentTheme.colors.border,
+      shadowColor: currentTheme.colors.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 2,
     }}>
       <View style={{
         width: 50,
         height: 50,
         borderRadius: 25,
-        backgroundColor: currentTheme.colors.primary,
+        backgroundColor: currentTheme.colors.snapYellow,
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 12,
       }}>
-        {item.profilePicture ? (
+        {item.profile_picture ? (
           <Image 
-            source={{ uri: item.profilePicture }} 
+            source={{ uri: item.profile_picture }} 
             style={{ width: 50, height: 50, borderRadius: 25 }}
           />
         ) : (
-          <Text style={{ 
-            fontSize: 18, 
+          <Text style={{
+            fontSize: 18,
             fontWeight: 'bold',
-            color: currentTheme.colors.background 
+            color: currentTheme.colors.textInverse,
           }}>
-            {(item.username || item.displayName)?.charAt(0).toUpperCase()}
+            {(item.username || item.display_name)?.charAt(0).toUpperCase()}
           </Text>
         )}
       </View>
@@ -363,8 +383,9 @@ const FindFriendsScreen = ({ navigation }) => {
           fontSize: 16,
           fontWeight: 'bold',
           color: currentTheme.colors.text,
+          marginBottom: 2,
         }}>
-          {item.displayName || item.username}
+          {item.display_name || item.username}
         </Text>
         <Text style={{
           fontSize: 14,
@@ -373,42 +394,30 @@ const FindFriendsScreen = ({ navigation }) => {
           @{item.username}
         </Text>
       </View>
-
+      
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <TouchableOpacity
           onPress={() => handleSendMessage(item)}
           style={{
-            backgroundColor: currentTheme.colors.primary,
-            borderRadius: 20,
+            backgroundColor: currentTheme.colors.snapPurple,
             paddingHorizontal: 12,
-            paddingVertical: 6,
+            paddingVertical: 8,
+            borderRadius: 20,
           }}
         >
-          <Text style={{
-            color: currentTheme.colors.background,
-            fontWeight: 'bold',
-            fontSize: 12,
-          }}>
-            Message
-          </Text>
+          <Ionicons name="chatbubble" size={16} color="white" />
         </TouchableOpacity>
         
         <TouchableOpacity
           onPress={() => handleSendSnap(item)}
           style={{
-            backgroundColor: currentTheme.colors.secondary || currentTheme.colors.border,
-            borderRadius: 20,
+            backgroundColor: currentTheme.colors.snapPink,
             paddingHorizontal: 12,
-            paddingVertical: 6,
+            paddingVertical: 8,
+            borderRadius: 20,
           }}
         >
-          <Text style={{
-            color: currentTheme.colors.text,
-            fontWeight: 'bold',
-            fontSize: 12,
-          }}>
-            Snap
-          </Text>
+          <Ionicons name="camera" size={16} color="white" />
         </TouchableOpacity>
       </View>
     </View>
@@ -423,222 +432,250 @@ const FindFriendsScreen = ({ navigation }) => {
       <View style={{
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 15,
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
         borderBottomWidth: 1,
         borderBottomColor: currentTheme.colors.border,
-        backgroundColor: currentTheme.colors.surface,
+        backgroundColor: currentTheme.colors.surfaceElevated,
       }}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={{ marginRight: 15 }}
-        >
+        <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={currentTheme.colors.text} />
         </TouchableOpacity>
-        
         <Text style={{
-          fontSize: 20,
+          fontSize: 18,
           fontWeight: 'bold',
           color: currentTheme.colors.text,
-          flex: 1,
         }}>
           Find Friends
         </Text>
+        <View style={{ width: 24 }} />
+      </View>
+
+      {/* Search Bar - Moved to top */}
+      <View style={{
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        backgroundColor: currentTheme.colors.surfaceElevated,
+        borderBottomWidth: 1,
+        borderBottomColor: currentTheme.colors.border,
+      }}>
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: currentTheme.colors.surface,
+          borderRadius: 25,
+          paddingHorizontal: 16,
+          paddingVertical: 12,
+          borderWidth: 1,
+          borderColor: currentTheme.colors.border,
+        }}>
+          <Ionicons name="search" size={20} color={currentTheme.colors.textSecondary} />
+          <TextInput
+            placeholder="Search users..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            style={{
+              flex: 1,
+              marginLeft: 12,
+              fontSize: 16,
+              color: currentTheme.colors.text,
+            }}
+            placeholderTextColor={currentTheme.colors.textSecondary}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={20} color={currentTheme.colors.textSecondary} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* Tab Navigation */}
       <View style={{
         flexDirection: 'row',
-        backgroundColor: currentTheme.colors.surface,
+        backgroundColor: currentTheme.colors.surfaceElevated,
         borderBottomWidth: 1,
         borderBottomColor: currentTheme.colors.border,
       }}>
         {[
-          { key: 'search', label: 'Search', icon: 'search' },
-          { key: 'requests', label: `Requests${friendRequests.length > 0 ? ` (${friendRequests.length})` : ''}`, icon: 'person-add' },
-          { key: 'friends', label: 'Friends', icon: 'people' },
+          { id: 'search', label: 'Search', icon: 'search' },
+          { id: 'requests', label: 'Requests', icon: 'person-add', badge: friendRequests.length },
+          { id: 'friends', label: 'Friends', icon: 'people' },
         ].map((tab) => (
           <TouchableOpacity
-            key={tab.key}
-            onPress={() => setActiveTab(tab.key)}
+            key={tab.id}
+            onPress={() => setActiveTab(tab.id)}
             style={{
               flex: 1,
               flexDirection: 'row',
               alignItems: 'center',
               justifyContent: 'center',
-              paddingVertical: 15,
+              paddingVertical: 16,
               borderBottomWidth: 2,
-              borderBottomColor: activeTab === tab.key ? currentTheme.colors.primary : 'transparent',
+              borderBottomColor: activeTab === tab.id ? currentTheme.colors.snapYellow : 'transparent',
             }}
           >
             <Ionicons 
               name={tab.icon} 
-              size={18} 
-              color={activeTab === tab.key ? currentTheme.colors.primary : currentTheme.colors.textSecondary}
-              style={{ marginRight: 6 }}
+              size={20} 
+              color={activeTab === tab.id ? currentTheme.colors.snapYellow : currentTheme.colors.textSecondary} 
             />
             <Text style={{
+              marginLeft: 8,
               fontSize: 14,
-              fontWeight: activeTab === tab.key ? 'bold' : 'normal',
-              color: activeTab === tab.key ? currentTheme.colors.primary : currentTheme.colors.textSecondary,
+              fontWeight: activeTab === tab.id ? 'bold' : 'normal',
+              color: activeTab === tab.id ? currentTheme.colors.snapYellow : currentTheme.colors.textSecondary,
             }}>
               {tab.label}
             </Text>
+            {tab.badge > 0 && (
+              <View style={{
+                backgroundColor: currentTheme.colors.error,
+                borderRadius: 10,
+                minWidth: 20,
+                height: 20,
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginLeft: 4,
+              }}>
+                <Text style={{
+                  color: 'white',
+                  fontSize: 12,
+                  fontWeight: 'bold',
+                }}>
+                  {tab.badge}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         ))}
       </View>
 
       {/* Content */}
-      {activeTab === 'search' && (
-        <View style={{ flex: 1 }}>
-          {/* Search Input */}
-          <View style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            margin: 15,
-            backgroundColor: currentTheme.colors.surface,
-            borderRadius: 25,
-            paddingHorizontal: 15,
-            borderWidth: 1,
-            borderColor: currentTheme.colors.border,
-          }}>
-            <Ionicons name="search" size={20} color={currentTheme.colors.textSecondary} />
-            <TextInput
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Search by username, name, or email..."
-              placeholderTextColor={currentTheme.colors.textSecondary}
-              style={{
+      <View style={{ flex: 1 }}>
+        {activeTab === 'search' && (
+          <View style={{ flex: 1 }}>
+            {searchQuery.length > 0 ? (
+              <FlatList
+                data={searchResults}
+                renderItem={renderSearchResult}
+                keyExtractor={(item) => item.id}
+                refreshControl={
+                  <RefreshControl refreshing={loading} onRefresh={handleSearch} />
+                }
+                contentContainerStyle={{ paddingVertical: 8 }}
+                ListEmptyComponent={
+                  <View style={{
+                    alignItems: 'center',
+                    paddingVertical: 40,
+                  }}>
+                    <Ionicons name="search" size={64} color={currentTheme.colors.textTertiary} />
+                    <Text style={{
+                      fontSize: 16,
+                      color: currentTheme.colors.textSecondary,
+                      marginTop: 16,
+                      textAlign: 'center',
+                    }}>
+                      {loading ? 'Searching...' : 'No users found'}
+                    </Text>
+                  </View>
+                }
+              />
+            ) : (
+              <View style={{
                 flex: 1,
-                paddingVertical: 12,
-                paddingHorizontal: 10,
-                fontSize: 16,
-                color: currentTheme.colors.text,
-              }}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Ionicons name="close-circle" size={20} color={currentTheme.colors.textSecondary} />
-              </TouchableOpacity>
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingHorizontal: 32,
+              }}>
+                <Ionicons name="search" size={80} color={currentTheme.colors.textTertiary} />
+                <Text style={{
+                  fontSize: 18,
+                  fontWeight: 'bold',
+                  color: currentTheme.colors.text,
+                  marginTop: 16,
+                  textAlign: 'center',
+                }}>
+                  Search for Friends
+                </Text>
+                <Text style={{
+                  fontSize: 14,
+                  color: currentTheme.colors.textSecondary,
+                  marginTop: 8,
+                  textAlign: 'center',
+                }}>
+                  Find friends by username, display name, or email
+                </Text>
+              </View>
             )}
           </View>
+        )}
 
-          {/* Search Results */}
-          {searchQuery.trim() ? (
-            <FlatList
-              data={searchResults}
-              renderItem={renderSearchResult}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={{ paddingBottom: 20 }}
-              ListEmptyComponent={() => (
-                <View style={{
-                  alignItems: 'center',
-                  paddingVertical: 40,
+        {activeTab === 'requests' && (
+          <FlatList
+            data={friendRequests}
+            renderItem={renderFriendRequest}
+            keyExtractor={(item) => item.id.toString()}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+            contentContainerStyle={{ paddingVertical: 8 }}
+            ListEmptyComponent={
+              <View style={{
+                alignItems: 'center',
+                paddingVertical: 40,
+              }}>
+                <Ionicons name="person-add" size={64} color={currentTheme.colors.textTertiary} />
+                <Text style={{
+                  fontSize: 16,
+                  color: currentTheme.colors.textSecondary,
+                  marginTop: 16,
+                  textAlign: 'center',
                 }}>
-                  <Ionicons name="search" size={64} color={currentTheme.colors.textSecondary} />
-                  <Text style={{
-                    fontSize: 16,
-                    color: currentTheme.colors.textSecondary,
-                    marginTop: 15,
-                    textAlign: 'center',
-                  }}>
-                    {loading ? 'Searching...' : 'No users found'}
-                  </Text>
-                </View>
-              )}
-            />
-          ) : (
-            <View style={{
-              flex: 1,
-              alignItems: 'center',
-              justifyContent: 'center',
-              paddingHorizontal: 40,
-            }}>
-              <Ionicons name="people" size={64} color={currentTheme.colors.textSecondary} />
-              <Text style={{
-                fontSize: 18,
-                fontWeight: 'bold',
-                color: currentTheme.colors.text,
-                marginTop: 15,
-                textAlign: 'center',
-              }}>
-                Find New Friends
-              </Text>
-              <Text style={{
-                fontSize: 16,
-                color: currentTheme.colors.textSecondary,
-                marginTop: 8,
-                textAlign: 'center',
-              }}>
-                Search for friends by username, name, or email address
-              </Text>
-            </View>
-          )}
-        </View>
-      )}
+                  No pending friend requests
+                </Text>
+              </View>
+            }
+          />
+        )}
 
-      {activeTab === 'requests' && (
-        <FlatList
-          data={friendRequests}
-          renderItem={renderFriendRequest}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingVertical: 10 }}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-          ListEmptyComponent={() => (
-            <View style={{
-              alignItems: 'center',
-              paddingVertical: 40,
-            }}>
-              <Ionicons name="person-add" size={64} color={currentTheme.colors.textSecondary} />
-              <Text style={{
-                fontSize: 16,
-                color: currentTheme.colors.textSecondary,
-                marginTop: 15,
-                textAlign: 'center',
+        {activeTab === 'friends' && (
+          <FlatList
+            data={friends}
+            renderItem={renderFriend}
+            keyExtractor={(item) => item.id}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+            contentContainerStyle={{ paddingVertical: 8 }}
+            ListEmptyComponent={
+              <View style={{
+                alignItems: 'center',
+                paddingVertical: 40,
               }}>
-                No friend requests
-              </Text>
-            </View>
-          )}
-        />
-      )}
-
-      {activeTab === 'friends' && (
-        <FlatList
-          data={friends}
-          renderItem={renderFriend}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingVertical: 10 }}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-          ListEmptyComponent={() => (
-            <View style={{
-              alignItems: 'center',
-              paddingVertical: 40,
-            }}>
-              <Ionicons name="people" size={64} color={currentTheme.colors.textSecondary} />
-              <Text style={{
-                fontSize: 16,
-                color: currentTheme.colors.textSecondary,
-                marginTop: 15,
-                textAlign: 'center',
-              }}>
-                No friends yet
-              </Text>
-              <Text style={{
-                fontSize: 14,
-                color: currentTheme.colors.textSecondary,
-                marginTop: 8,
-                textAlign: 'center',
-              }}>
-                Search for friends to get started!
-              </Text>
-            </View>
-          )}
-        />
-      )}
+                <Ionicons name="people" size={64} color={currentTheme.colors.textTertiary} />
+                <Text style={{
+                  fontSize: 16,
+                  color: currentTheme.colors.textSecondary,
+                  marginTop: 16,
+                  textAlign: 'center',
+                }}>
+                  No friends yet
+                </Text>
+                <Text style={{
+                  fontSize: 14,
+                  color: currentTheme.colors.textTertiary,
+                  marginTop: 8,
+                  textAlign: 'center',
+                }}>
+                  Search for users to send friend requests
+                </Text>
+              </View>
+            }
+          />
+        )}
+      </View>
     </SafeAreaView>
   );
 };

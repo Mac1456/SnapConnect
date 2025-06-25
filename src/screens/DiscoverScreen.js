@@ -244,7 +244,7 @@ const DiscoverScreen = ({ navigation }) => {
 
   return (
     <LinearGradient
-      colors={currentTheme.colors.background}
+      colors={currentTheme.colors.backgroundGradient || (currentTheme.mode === 'dark' ? ['#000000', '#1A1A1A'] : ['#FFFFFF', '#F8F9FA'])}
       className="flex-1"
     >
       <SafeAreaView className="flex-1">

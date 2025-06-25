@@ -87,17 +87,28 @@ export const useSupabaseAuthStore = create((set, get) => ({
       set({ loading: true, error: null });
       
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: email.trim().toLowerCase(),
+        password: password,
       });
 
       if (error) {
         console.error('🟢 SupabaseAuthStore: signIn error:', error);
-        set({ error: error.message, loading: false });
-        return;
+        
+        // Provide more helpful error messages
+        let errorMessage = error.message;
+        if (error.message.includes('Invalid login credentials')) {
+          errorMessage = 'Invalid email or password. Please check your credentials and try again.';
+        } else if (error.message.includes('Email not confirmed')) {
+          errorMessage = 'Please check your email and confirm your account before signing in.';
+        } else if (error.message.includes('Too many requests')) {
+          errorMessage = 'Too many login attempts. Please wait a moment and try again.';
+        }
+        
+        set({ error: errorMessage, loading: false });
+        return { success: false, error: errorMessage };
       }
 
-      console.log('🟢 SupabaseAuthStore: signIn successful');
+      console.log('🟢 SupabaseAuthStore: signIn successful for user:', data.user.id);
       
       // Check if user profile exists, create if missing
       if (data.user) {
@@ -110,27 +121,38 @@ export const useSupabaseAuthStore = create((set, get) => ({
         if (profileError && profileError.code === 'PGRST116') {
           // Profile doesn't exist, create it
           console.log('🟢 SupabaseAuthStore: Creating missing profile for existing user');
-          const { error: createError } = await supabase.rpc('create_user_profile', {
-            user_id: data.user.id,
-            username: data.user.email.split('@')[0], // Use email prefix as username
-            display_name: data.user.email.split('@')[0],
-            email: data.user.email,
-          });
+          
+          const username = data.user.email.split('@')[0];
+          const { error: createError } = await supabase
+            .from('users')
+            .insert({
+              id: data.user.id,
+              email: data.user.email,
+              username: username,
+              display_name: username,
+              created_at: new Date().toISOString(),
+            });
 
           if (createError) {
             console.error('🟢 SupabaseAuthStore: Error creating profile:', createError);
+            // Don't fail the login if profile creation fails
           } else {
             console.log('🟢 SupabaseAuthStore: Profile created for existing user');
           }
+        } else if (profileError) {
+          console.error('🟢 SupabaseAuthStore: Error fetching profile:', profileError);
         }
       }
       
       // Auth state change will be handled by the listener
       set({ loading: false });
+      return { success: true };
       
     } catch (error) {
       console.error('🟢 SupabaseAuthStore: signIn error:', error);
-      set({ error: error.message, loading: false });
+      const errorMessage = 'An unexpected error occurred. Please try again.';
+      set({ error: errorMessage, loading: false });
+      return { success: false, error: errorMessage };
     }
   },
 
@@ -251,38 +273,88 @@ export const useSupabaseAuthStore = create((set, get) => ({
   updateProfile: async (userData) => {
     try {
       const { user } = get();
-      if (user) {
-        const { error } = await supabase
-          .from('users')
-          .update({
-            display_name: userData.displayName,
-            bio: userData.bio,
-            profile_picture: userData.profileImage,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', user.uid);
-
-        if (error) {
-          console.error('🟢 SupabaseAuthStore: updateProfile error:', error);
-          set({ error: error.message });
-          return;
-        }
-
-        // Update local state
-        set({ 
-          user: { 
-            ...user, 
-            display_name: userData.displayName,
-            bio: userData.bio,
-            profile_picture: userData.profileImage,
-          } 
-        });
-        
-        console.log('🟢 SupabaseAuthStore: Profile updated successfully');
+      if (!user) {
+        console.error('🟢 SupabaseAuthStore: No authenticated user for profile update');
+        set({ error: 'User not authenticated' });
+        return;
       }
+
+      console.log('🟢 SupabaseAuthStore: Updating profile with data:', userData);
+
+      let profileImageUrl = userData.profileImage;
+
+      // If profileImage is a local URI, upload it to Supabase storage
+      if (userData.profileImage && userData.profileImage.startsWith('file://')) {
+        try {
+          console.log('🟢 SupabaseAuthStore: Uploading profile image to storage');
+          
+          const fileName = `profiles/${user.uid || user.id}/${Date.now()}.jpg`;
+          
+          // Convert file URI to blob for upload
+          const response = await fetch(userData.profileImage);
+          const blob = await response.blob();
+          
+          console.log('🟢 SupabaseAuthStore: Profile image blob created, size:', blob.size);
+          
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('media')
+            .upload(fileName, blob, {
+              contentType: 'image/jpeg',
+              upsert: true
+            });
+
+          if (uploadError) {
+            console.error('🟢 SupabaseAuthStore: Profile image upload error:', uploadError);
+            throw uploadError;
+          }
+
+          console.log('🟢 SupabaseAuthStore: Profile image upload successful:', uploadData);
+
+          // Get public URL
+          const { data: { publicUrl } } = supabase.storage
+            .from('media')
+            .getPublicUrl(fileName);
+
+          profileImageUrl = publicUrl;
+          console.log('🟢 SupabaseAuthStore: Profile image public URL:', profileImageUrl);
+        } catch (uploadError) {
+          console.error('🟢 SupabaseAuthStore: Failed to upload profile image:', uploadError);
+          // Continue with local URL if upload fails
+        }
+      }
+
+      const { error } = await supabase
+        .from('users')
+        .update({
+          display_name: userData.displayName,
+          bio: userData.bio,
+          profile_picture: profileImageUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.uid || user.id);
+
+      if (error) {
+        console.error('🟢 SupabaseAuthStore: updateProfile error:', error);
+        set({ error: error.message });
+        return;
+      }
+
+      // Update local state
+      const updatedUser = { 
+        ...user, 
+        display_name: userData.displayName,
+        bio: userData.bio,
+        profile_picture: profileImageUrl,
+      };
+      
+      set({ user: updatedUser });
+      
+      console.log('🟢 SupabaseAuthStore: Profile updated successfully');
+      return { success: true, user: updatedUser };
     } catch (error) {
       console.error('🟢 SupabaseAuthStore: updateProfile error:', error);
       set({ error: error.message });
+      throw error;
     }
   },
 

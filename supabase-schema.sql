@@ -281,4 +281,56 @@ ALTER PUBLICATION supabase_realtime ADD TABLE friendships;
 --   ('550e8400-e29b-41d4-a716-446655440002', 'jane_smith', 'Jane Smith', 'jane@example.com', 'Snapchat enthusiast'),
 --   ('550e8400-e29b-41d4-a716-446655440003', 'mike_wilson', 'Mike Wilson', 'mike@example.com', 'Always sharing stories');
 
+-- ========================================
+-- MESSAGES TABLE SETUP
+-- ========================================
+
+-- Create messages table if it doesn't exist
+CREATE TABLE IF NOT EXISTS messages (
+  id BIGSERIAL PRIMARY KEY,
+  sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  recipient_id UUID REFERENCES users(id) ON DELETE CASCADE, -- NULL for group messages
+  content TEXT NOT NULL,
+  message_type TEXT DEFAULT 'text' CHECK (message_type IN ('text', 'image', 'video', 'system')),
+  media_url TEXT,
+  group_members UUID[], -- Array of user IDs for group messages
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  read_at TIMESTAMP WITH TIME ZONE,
+  deleted_at TIMESTAMP WITH TIME ZONE -- For disappearing messages
+);
+
+-- Create indexes for better performance
+CREATE INDEX IF NOT EXISTS idx_messages_sender_recipient ON messages(sender_id, recipient_id);
+CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
+CREATE INDEX IF NOT EXISTS idx_messages_deleted_at ON messages(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_messages_group_members ON messages USING GIN(group_members);
+
+-- Enable RLS on messages table
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+
+-- Drop all existing message policies to avoid conflicts
+DROP POLICY IF EXISTS "Users can view own messages" ON messages;
+DROP POLICY IF EXISTS "Users can send messages" ON messages;
+DROP POLICY IF EXISTS "Users can update own messages" ON messages;
+
+-- Create message policies
+CREATE POLICY "Users can view own messages" ON messages
+  FOR SELECT USING (
+    auth.uid() = sender_id OR 
+    auth.uid() = recipient_id OR
+    (group_members IS NOT NULL AND auth.uid() = ANY(group_members))
+  );
+
+CREATE POLICY "Users can send messages" ON messages
+  FOR INSERT WITH CHECK (
+    auth.uid() = sender_id
+  );
+
+CREATE POLICY "Users can update own messages" ON messages
+  FOR UPDATE USING (
+    auth.uid() = sender_id OR 
+    auth.uid() = recipient_id OR
+    (group_members IS NOT NULL AND auth.uid() = ANY(group_members))
+  );
+
 -- Schema setup complete! 

@@ -17,53 +17,104 @@ import { useThemeStore } from '../stores/themeStore';
 import { supabase } from '../../supabase.config';
 
 export default function ChatScreen({ navigation, route }) {
-  const { recipientId, recipientUsername, recipientName } = route.params;
+  const { recipientId, recipientUsername, recipientName, isGroup = false, groupName = null } = route.params;
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [showDisappearTimer, setShowDisappearTimer] = useState(false);
+  const [disappearTimer, setDisappearTimer] = useState(null); // null means no timer
   const flatListRef = useRef(null);
   
   const { user } = useAuthStore();
   const { currentTheme } = useThemeStore();
 
+  const currentUserId = user?.uid || user?.id || user?.userId;
+
+  // Disappearing message timer options (in seconds)
+  const timerOptions = [
+    { label: 'No Timer', value: null },
+    { label: '5 seconds', value: 5 },
+    { label: '10 seconds', value: 10 },
+    { label: '30 seconds', value: 30 },
+    { label: '1 minute', value: 60 },
+    { label: '5 minutes', value: 300 },
+    { label: '1 hour', value: 3600 },
+  ];
+
   useEffect(() => {
-    if (user?.uid && recipientId) {
+    if (currentUserId && recipientId) {
       loadMessages();
       setupRealtimeSubscription();
     }
-  }, [user, recipientId]);
+
+    return () => {
+      // Clean up subscription on unmount
+    };
+  }, [currentUserId, recipientId]);
 
   const loadMessages = async () => {
     try {
-      setLoading(true);
-      console.log('💬 ChatScreen: Loading messages between', user.uid, 'and', recipientId);
+      console.log('💬 ChatScreen: Loading messages between', currentUserId, 'and', recipientId);
       
       const { data, error } = await supabase
         .from('messages')
-        .select('*')
-        .or(`and(sender_id.eq.${user.uid},recipient_id.eq.${recipientId}),and(sender_id.eq.${recipientId},recipient_id.eq.${user.uid})`)
+        .select(`
+          *,
+          sender:sender_id (
+            id,
+            username,
+            display_name,
+            profile_picture
+          ),
+          recipient:recipient_id (
+            id,
+            username,
+            display_name,
+            profile_picture
+          )
+        `)
+        .or(`and(sender_id.eq.${currentUserId},recipient_id.eq.${recipientId}),and(sender_id.eq.${recipientId},recipient_id.eq.${currentUserId})`)
+        .is('deleted_at', null) // Only get messages that haven't been deleted
         .order('created_at', { ascending: true });
 
       if (error) {
         console.error('💬 ChatScreen: Error loading messages:', error);
-        Alert.alert('Error', 'Failed to load messages');
         return;
       }
 
-      console.log('💬 ChatScreen: Loaded', data?.length || 0, 'messages');
-      setMessages(data || []);
-      
-      // Scroll to bottom after loading messages
+      const processedMessages = data?.filter(msg => {
+        // Filter out expired disappearing messages
+        if (msg.timer_seconds > 0) {
+          const expiryTime = new Date(msg.created_at).getTime() + (msg.timer_seconds * 1000);
+          if (Date.now() > expiryTime) {
+            return false; // Message has expired
+          }
+        }
+        return true;
+      }).map(msg => ({
+        id: msg.id,
+        text: msg.content,
+        senderId: msg.sender_id,
+        recipientId: msg.recipient_id,
+        timestamp: new Date(msg.created_at),
+        isCurrentUser: msg.sender_id === currentUserId,
+        senderName: msg.sender?.display_name || msg.sender?.username || 'Unknown',
+        timerSeconds: msg.timer_seconds || 0,
+        isDisappearing: msg.timer_seconds > 0,
+      })) || [];
+
+      setMessages(processedMessages);
+      console.log('💬 ChatScreen: Loaded', processedMessages.length, 'messages');
+
+      // Scroll to bottom after loading
       setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
+        if (flatListRef.current && processedMessages.length > 0) {
+          flatListRef.current.scrollToEnd({ animated: false });
+        }
       }, 100);
-      
     } catch (error) {
-      console.error('💬 ChatScreen: Error loading messages:', error);
-      Alert.alert('Error', 'Failed to load messages');
-    } finally {
-      setLoading(false);
+      console.error('💬 ChatScreen: Error in loadMessages:', error);
     }
   };
 
@@ -72,28 +123,41 @@ export default function ChatScreen({ navigation, route }) {
     
     const subscription = supabase
       .channel('messages')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
+      .on('postgres_changes', 
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
           table: 'messages',
-          filter: `or(and(sender_id.eq.${user.uid},recipient_id.eq.${recipientId}),and(sender_id.eq.${recipientId},recipient_id.eq.${user.uid}))`,
-        },
+          filter: `or(and(sender_id.eq.${currentUserId},recipient_id.eq.${recipientId}),and(sender_id.eq.${recipientId},recipient_id.eq.${currentUserId}))`
+        }, 
         (payload) => {
-          console.log('💬 ChatScreen: New message received:', payload.new);
+          console.log('💬 ChatScreen: New message received:', payload);
           const newMsg = payload.new;
           
-          // Only add if it's not already in the list (to prevent duplicates)
+          const processedMessage = {
+            id: newMsg.id,
+            text: newMsg.content,
+            senderId: newMsg.sender_id,
+            recipientId: newMsg.recipient_id,
+            timestamp: new Date(newMsg.created_at),
+            isCurrentUser: newMsg.sender_id === currentUserId,
+            senderName: newMsg.sender_id === currentUserId ? 'You' : recipientName,
+          };
+
           setMessages(prev => {
-            const exists = prev.find(msg => msg.id === newMsg.id);
+            // Check if message already exists to avoid duplicates
+            const exists = prev.some(msg => msg.id === processedMessage.id);
             if (exists) return prev;
             
-            const updated = [...prev, newMsg];
-            // Scroll to bottom when new message arrives
+            const updated = [...prev, processedMessage];
+            
+            // Auto-scroll to bottom for new messages
             setTimeout(() => {
-              flatListRef.current?.scrollToEnd({ animated: true });
+              if (flatListRef.current) {
+                flatListRef.current.scrollToEnd({ animated: true });
+              }
             }, 100);
+            
             return updated;
           });
         }
@@ -101,48 +165,61 @@ export default function ChatScreen({ navigation, route }) {
       .subscribe();
 
     return () => {
-      console.log('💬 ChatScreen: Cleaning up real-time subscription');
       supabase.removeChannel(subscription);
     };
   };
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || sending) return;
-    
+    if (!newMessage.trim()) return;
+
     const messageText = newMessage.trim();
-    setNewMessage(''); // Clear input immediately for better UX
-    setSending(true);
-    
+    setNewMessage('');
+
+    // Optimistic update - add message immediately to UI
+    const optimisticMessage = {
+      id: `temp-${Date.now()}`,
+      text: messageText,
+      senderId: currentUserId,
+      recipientId: recipientId,
+      timestamp: new Date(),
+      isCurrentUser: true,
+      senderName: 'You',
+      isOptimistic: true,
+    };
+
+    setMessages(prev => [...prev, optimisticMessage]);
+
+    // Scroll to bottom immediately
+    setTimeout(() => {
+      if (flatListRef.current) {
+        flatListRef.current.scrollToEnd({ animated: true });
+      }
+    }, 50);
+
     try {
-      console.log('💬 ChatScreen: Sending message:', messageText);
-      
-      // Optimistically add message to UI
-      const optimisticMessage = {
-        id: `temp-${Date.now()}`, // Temporary ID
-        sender_id: user.uid,
-        recipient_id: recipientId,
+      setLoading(true);
+
+      // Prepare message data with optional disappearing timer
+      const messageData = {
+        sender_id: currentUserId,
+        recipient_id: isGroup ? null : recipientId,
         content: messageText,
         message_type: 'text',
-        created_at: new Date().toISOString(),
-        sending: true, // Mark as sending
       };
-      
-      setMessages(prev => [...prev, optimisticMessage]);
-      
-      // Scroll to bottom immediately
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 50);
-      
-      // Send to database
+
+      // Add disappearing timer if specified
+      if (disappearTimer) {
+        messageData.timer_seconds = disappearTimer;
+      }
+
+      // Add group members if this is a group chat
+      if (isGroup && route.params.groupMembers) {
+        messageData.group_members = route.params.groupMembers;
+      }
+
       const { data, error } = await supabase
         .from('messages')
-        .insert({
-          sender_id: user.uid,
-          recipient_id: recipientId,
-          content: messageText,
-          message_type: 'text',
-        })
+        .insert(messageData)
         .select()
         .single();
 
@@ -151,29 +228,31 @@ export default function ChatScreen({ navigation, route }) {
         // Remove optimistic message on error
         setMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id));
         Alert.alert('Error', 'Failed to send message');
-        setNewMessage(messageText); // Restore message text
         return;
       }
 
-      console.log('💬 ChatScreen: Message sent successfully:', data);
-      
-      // Replace optimistic message with real message
-      setMessages(prev => 
-        prev.map(msg => 
-          msg.id === optimisticMessage.id 
-            ? { ...data, sending: false }
-            : msg
-        )
-      );
-      
+      // Replace optimistic message with real one
+      setMessages(prev => prev.map(msg => 
+        msg.id === optimisticMessage.id 
+          ? {
+              id: data.id,
+              text: data.content,
+              senderId: data.sender_id,
+              recipientId: data.recipient_id,
+              timestamp: new Date(data.created_at),
+              isCurrentUser: true,
+              senderName: 'You',
+            }
+          : msg
+      ));
+
     } catch (error) {
-      console.error('💬 ChatScreen: Error sending message:', error);
+      console.error('💬 ChatScreen: Error in sendMessage:', error);
       // Remove optimistic message on error
       setMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id));
       Alert.alert('Error', 'Failed to send message');
-      setNewMessage(messageText); // Restore message text
     } finally {
-      setSending(false);
+      setLoading(false);
     }
   };
 
@@ -193,269 +272,376 @@ export default function ChatScreen({ navigation, route }) {
     ]);
   };
 
-  const renderMessage = ({ item, index }) => {
-    const isMyMessage = item.sender_id === user.uid;
-    const showTime = index === 0 || 
-      (new Date(item.created_at).getTime() - new Date(messages[index - 1].created_at).getTime() > 300000); // 5 minutes
-
-    return (
-      <View style={{ marginVertical: 2 }}>
-        {showTime && (
-          <Text style={{
-            textAlign: 'center',
-            color: currentTheme.colors.textSecondary,
-            fontSize: 12,
-            marginVertical: 10,
-          }}>
-            {formatTime(item.created_at)}
-          </Text>
-        )}
-        
-        <View style={{
-          flexDirection: 'row',
-          justifyContent: isMyMessage ? 'flex-end' : 'flex-start',
-          paddingHorizontal: 15,
-          marginVertical: 2,
+  const renderMessage = ({ item }) => (
+    <View style={{
+      flexDirection: item.isCurrentUser ? 'row-reverse' : 'row',
+      marginVertical: 4,
+      marginHorizontal: 16,
+      alignItems: 'flex-end',
+    }}>
+      <View style={{
+        backgroundColor: item.isCurrentUser 
+          ? currentTheme.colors.chatBubbleSent 
+          : currentTheme.colors.chatBubbleReceived,
+        borderRadius: 18,
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        maxWidth: '75%',
+        marginHorizontal: 8,
+        borderWidth: 2,
+        borderColor: item.isCurrentUser 
+          ? currentTheme.colors.snapPink 
+          : currentTheme.colors.borderStrong,
+        shadowColor: currentTheme.colors.shadow,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+        elevation: 4,
+      }}>
+        <Text style={{
+          color: item.isCurrentUser 
+            ? currentTheme.colors.chatBubbleTextSent 
+            : currentTheme.colors.chatBubbleTextReceived,
+          fontSize: 16,
+          fontWeight: '500',
         }}>
-          <View style={{
-            backgroundColor: isMyMessage ? currentTheme.colors.primary : currentTheme.colors.surface,
-            borderRadius: 20,
-            paddingHorizontal: 15,
-            paddingVertical: 10,
-            maxWidth: '80%',
-            borderWidth: 1,
-            borderColor: currentTheme.colors.border,
-            opacity: item.sending ? 0.7 : 1,
-          }}>
-            <Text style={{
-              color: isMyMessage ? currentTheme.colors.background : currentTheme.colors.text,
-              fontSize: 16,
-            }}>
-              {item.content}
-            </Text>
-            
-            {item.sending && (
-              <View style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                marginTop: 4,
-              }}>
-                <Text style={{
-                  color: isMyMessage ? currentTheme.colors.background : currentTheme.colors.textSecondary,
-                  fontSize: 12,
-                  opacity: 0.7,
-                }}>
-                  Sending...
-                </Text>
-              </View>
-            )}
-          </View>
-        </View>
+          {item.text}
+        </Text>
+        <Text style={{
+          color: item.isCurrentUser 
+            ? currentTheme.colors.chatBubbleTextSent + '80'
+            : currentTheme.colors.chatBubbleTextReceived + '80',
+          fontSize: 12,
+          marginTop: 4,
+          textAlign: item.isCurrentUser ? 'right' : 'left',
+        }}>
+          {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {item.isOptimistic && ' ⏳'}
+          {item.isDisappearing && ' 🕒'}
+        </Text>
       </View>
-    );
-  };
+    </View>
+  );
 
   return (
     <SafeAreaView style={{ 
       flex: 1, 
       backgroundColor: currentTheme.colors.background 
     }}>
-      {/* Header */}
-      <View style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 15,
-        borderBottomWidth: 1,
-        borderBottomColor: currentTheme.colors.border,
-        backgroundColor: currentTheme.colors.surface,
-      }}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={{ marginRight: 15 }}
-        >
-          <Ionicons name="arrow-back" size={24} color={currentTheme.colors.text} />
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          onPress={handleProfilePress}
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            flex: 1,
-          }}
-        >
-          <View style={{
-            width: 40,
-            height: 40,
-            borderRadius: 20,
-            backgroundColor: currentTheme.colors.primary,
-            justifyContent: 'center',
-            alignItems: 'center',
-            marginRight: 12,
-          }}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        {/* Header */}
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          padding: 16,
+          backgroundColor: currentTheme.colors.surface,
+          borderBottomWidth: 2,
+          borderBottomColor: currentTheme.colors.snapYellow,
+          shadowColor: currentTheme.colors.shadowStrong,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 8,
+          elevation: 8,
+        }}>
+          <TouchableOpacity
+            onPress={() => {
+              console.log('💬 ChatScreen: Back button pressed');
+              navigation.goBack();
+            }}
+            style={{
+              padding: 8,
+              borderRadius: 20,
+              backgroundColor: currentTheme.colors.snapPink,
+              borderWidth: 2,
+              borderColor: currentTheme.colors.snapYellow,
+              marginRight: 12,
+            }}
+          >
+            <Ionicons name="arrow-back" size={24} color={currentTheme.colors.textInverse} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={handleProfilePress}
+            style={{
+              width: 50,
+              height: 50,
+              borderRadius: 25,
+              backgroundColor: currentTheme.colors.snapYellow,
+              borderWidth: 2,
+              borderColor: currentTheme.colors.snapPink,
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginRight: 12,
+            }}
+          >
             <Text style={{
-              fontSize: 16,
+              fontSize: 18,
               fontWeight: 'bold',
-              color: currentTheme.colors.background,
+              color: currentTheme.colors.textInverse,
             }}>
-              {(recipientName || recipientUsername)?.charAt(0).toUpperCase()}
+              {(recipientName || recipientUsername)?.charAt(0)?.toUpperCase() || '?'}
             </Text>
-          </View>
-          
-          <View>
+          </TouchableOpacity>
+
+          <View style={{ flex: 1 }}>
             <Text style={{
               fontSize: 18,
               fontWeight: 'bold',
               color: currentTheme.colors.text,
             }}>
-              {recipientName || recipientUsername}
+              {isGroup ? (groupName || 'Group Chat') : (recipientName || recipientUsername)}
             </Text>
             <Text style={{
               fontSize: 14,
               color: currentTheme.colors.textSecondary,
             }}>
-              @{recipientUsername}
+              {isGroup ? 'Group chat' : 'Active now'}
+              {disappearTimer && ` • Disappearing: ${disappearTimer < 60 ? `${disappearTimer}s` : `${Math.floor(disappearTimer / 60)}m`}`}
             </Text>
           </View>
-        </TouchableOpacity>
 
-        <TouchableOpacity
-          onPress={() => {
-            // Navigate to camera for sending snap
-            navigation.navigate('Camera', {
-              recipientId,
-              recipientUsername,
-              mode: 'snap'
-            });
-          }}
-          style={{
-            backgroundColor: currentTheme.colors.primary,
-            borderRadius: 20,
-            paddingHorizontal: 12,
-            paddingVertical: 6,
-          }}
-        >
-          <Text style={{
-            color: currentTheme.colors.background,
-            fontWeight: 'bold',
-            fontSize: 12,
-          }}>
-            📸 Snap
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Messages */}
-      <KeyboardAvoidingView 
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-      >
-        {loading ? (
-          <View style={{
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}>
-            <Text style={{
-              color: currentTheme.colors.textSecondary,
-              fontSize: 16,
-            }}>
-              Loading messages...
-            </Text>
-          </View>
-        ) : (
-          <FlatList
-            ref={flatListRef}
-            data={messages}
-            renderItem={renderMessage}
-            keyExtractor={(item) => item.id.toString()}
-            style={{ flex: 1 }}
-            contentContainerStyle={{ paddingVertical: 10 }}
-            onContentSizeChange={() => {
-              // Auto-scroll to bottom when content changes
-              setTimeout(() => {
-                flatListRef.current?.scrollToEnd({ animated: true });
-              }, 100);
-            }}
-            ListEmptyComponent={() => (
-              <View style={{
-                flex: 1,
-                justifyContent: 'center',
-                alignItems: 'center',
-                paddingVertical: 50,
-              }}>
-                <Ionicons name="chatbubbles-outline" size={64} color={currentTheme.colors.textSecondary} />
-                <Text style={{
-                  fontSize: 18,
-                  fontWeight: 'bold',
-                  color: currentTheme.colors.text,
-                  marginTop: 15,
-                  textAlign: 'center',
-                }}>
-                  Start a conversation
-                </Text>
-                <Text style={{
-                  fontSize: 16,
-                  color: currentTheme.colors.textSecondary,
-                  marginTop: 8,
-                  textAlign: 'center',
-                }}>
-                  Send a message to {recipientName || recipientUsername}
-                </Text>
-              </View>
-            )}
-          />
-        )}
-
-        {/* Message Input */}
-        <View style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          padding: 15,
-          borderTopWidth: 1,
-          borderTopColor: currentTheme.colors.border,
-          backgroundColor: currentTheme.colors.surface,
-        }}>
-          <TextInput
-            value={newMessage}
-            onChangeText={setNewMessage}
-            placeholder="Type a message..."
-            placeholderTextColor={currentTheme.colors.textSecondary}
-            style={{
-              flex: 1,
-              backgroundColor: currentTheme.colors.background,
-              borderRadius: 25,
-              paddingHorizontal: 15,
-              paddingVertical: 12,
-              fontSize: 16,
-              color: currentTheme.colors.text,
-              borderWidth: 1,
-              borderColor: currentTheme.colors.border,
-              marginRight: 10,
-            }}
-            multiline
-            maxLength={1000}
-            onSubmitEditing={sendMessage}
-            returnKeyType="send"
-          />
-          
+          {/* Disappearing Message Timer Button */}
           <TouchableOpacity
-            onPress={sendMessage}
-            disabled={!newMessage.trim() || sending}
+            onPress={() => {
+              console.log('💬 ChatScreen: Timer button pressed');
+              setShowDisappearTimer(!showDisappearTimer);
+            }}
             style={{
-              backgroundColor: newMessage.trim() && !sending ? currentTheme.colors.primary : currentTheme.colors.border,
-              borderRadius: 25,
-              padding: 12,
+              padding: 8,
+              borderRadius: 15,
+              backgroundColor: disappearTimer ? currentTheme.colors.snapYellow : currentTheme.colors.surface,
+              borderWidth: 2,
+              borderColor: currentTheme.colors.borderStrong,
+              marginLeft: 8,
             }}
           >
             <Ionicons 
-              name={sending ? "hourglass" : "send"} 
+              name="timer-outline" 
               size={20} 
-              color={newMessage.trim() && !sending ? currentTheme.colors.background : currentTheme.colors.textSecondary} 
+              color={disappearTimer ? currentTheme.colors.textInverse : currentTheme.colors.textSecondary} 
             />
           </TouchableOpacity>
         </View>
+
+        {/* Messages List */}
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderMessage}
+          style={{ 
+            flex: 1, 
+            backgroundColor: currentTheme.colors.background,
+            paddingHorizontal: 16,
+          }}
+          contentContainerStyle={{ paddingVertical: 16 }}
+          showsVerticalScrollIndicator={false}
+          onContentSizeChange={() => {
+            if (flatListRef.current && messages.length > 0) {
+              flatListRef.current.scrollToEnd({ animated: false });
+            }
+          }}
+          ListEmptyComponent={
+            <View style={{
+              flex: 1,
+              justifyContent: 'center',
+              alignItems: 'center',
+              paddingVertical: 40,
+            }}>
+              <Text style={{
+                fontSize: 18,
+                fontWeight: 'bold',
+                color: currentTheme.colors.text,
+                marginBottom: 8,
+              }}>
+                Start the conversation!
+              </Text>
+              <Text style={{
+                fontSize: 14,
+                color: currentTheme.colors.textSecondary,
+                textAlign: 'center',
+              }}>
+                Send a message to {recipientName || recipientUsername}
+              </Text>
+            </View>
+          }
+        />
+
+        {/* Input Area */}
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          padding: 16,
+          backgroundColor: currentTheme.colors.surface,
+          borderTopWidth: 2,
+          borderTopColor: currentTheme.colors.snapYellow,
+          shadowColor: currentTheme.colors.shadowStrong,
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 8,
+          elevation: 8,
+        }}>
+          {/* Camera Snap Button */}
+          <TouchableOpacity
+            onPress={() => {
+              console.log('💬 ChatScreen: Camera snap button pressed');
+              navigation.navigate('Camera', { 
+                directSendTo: recipientId,
+                recipientName: recipientName || recipientUsername 
+              });
+            }}
+            style={{
+              width: 50,
+              height: 50,
+              borderRadius: 25,
+              backgroundColor: currentTheme.colors.snapPink,
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginRight: 12,
+              borderWidth: 2,
+              borderColor: currentTheme.colors.snapYellow,
+              shadowColor: currentTheme.colors.snapPink,
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.4,
+              shadowRadius: 8,
+              elevation: 8,
+            }}
+          >
+            <Ionicons name="camera" size={24} color={currentTheme.colors.textInverse} />
+          </TouchableOpacity>
+
+          <View style={{
+            flex: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: currentTheme.colors.background,
+            borderRadius: 25,
+            borderWidth: 2,
+            borderColor: currentTheme.colors.borderStrong,
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+            marginRight: 12,
+            shadowColor: currentTheme.colors.shadow,
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.3,
+            shadowRadius: 8,
+            elevation: 6,
+          }}>
+            <TextInput
+              value={newMessage}
+              onChangeText={(text) => {
+                console.log('💬 ChatScreen: Message text changed:', text);
+                setNewMessage(text);
+              }}
+              placeholder={`Message ${recipientName || recipientUsername}...`}
+              placeholderTextColor={currentTheme.colors.textTertiary}
+              style={{
+                flex: 1,
+                fontSize: 16,
+                color: currentTheme.colors.text,
+                maxHeight: 100,
+              }}
+              multiline
+              onSubmitEditing={() => {
+                if (!loading && newMessage.trim()) {
+                  console.log('💬 ChatScreen: Message submitted via keyboard');
+                  sendMessage();
+                }
+              }}
+              returnKeyType="send"
+              blurOnSubmit={false}
+            />
+          </View>
+
+          <TouchableOpacity
+            onPress={() => {
+              console.log('💬 ChatScreen: Send button pressed');
+              sendMessage();
+            }}
+            disabled={!newMessage.trim() || loading}
+            style={{
+              width: 50,
+              height: 50,
+              borderRadius: 25,
+              backgroundColor: currentTheme.colors.snapYellow,
+              justifyContent: 'center',
+              alignItems: 'center',
+              opacity: (!newMessage.trim() || loading) ? 0.5 : 1,
+              borderWidth: 2,
+              borderColor: currentTheme.colors.snapPink,
+              shadowColor: currentTheme.colors.snapYellow,
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.4,
+              shadowRadius: 8,
+              elevation: 8,
+            }}
+          >
+            <Ionicons 
+              name={loading ? "hourglass" : "send"} 
+              size={24} 
+              color={currentTheme.colors.textInverse} 
+            />
+          </TouchableOpacity>
+        </View>
+
+        {/* Disappearing Timer Options Modal */}
+        {showDisappearTimer && (
+          <View style={{
+            position: 'absolute',
+            bottom: 100,
+            right: 16,
+            backgroundColor: currentTheme.colors.surface,
+            borderRadius: 15,
+            borderWidth: 2,
+            borderColor: currentTheme.colors.snapYellow,
+            padding: 12,
+            shadowColor: currentTheme.colors.shadow,
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.3,
+            shadowRadius: 8,
+            elevation: 8,
+            minWidth: 150,
+          }}>
+            <Text style={{
+              fontSize: 14,
+              fontWeight: 'bold',
+              color: currentTheme.colors.text,
+              marginBottom: 8,
+              textAlign: 'center',
+            }}>
+              Disappearing Messages
+            </Text>
+            {timerOptions.map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                onPress={() => {
+                  console.log('💬 ChatScreen: Timer option selected:', option.label);
+                  setDisappearTimer(option.value);
+                  setShowDisappearTimer(false);
+                }}
+                style={{
+                  paddingVertical: 8,
+                  paddingHorizontal: 12,
+                  borderRadius: 8,
+                  backgroundColor: disappearTimer === option.value ? currentTheme.colors.snapYellow : 'transparent',
+                  marginVertical: 2,
+                }}
+              >
+                <Text style={{
+                  color: disappearTimer === option.value ? currentTheme.colors.textInverse : currentTheme.colors.text,
+                  fontSize: 12,
+                  textAlign: 'center',
+                }}>
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

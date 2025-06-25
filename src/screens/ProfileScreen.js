@@ -28,6 +28,16 @@ export default function ProfileScreen({ navigation }) {
   const [editBio, setEditBio] = useState(user?.bio || user?.display_bio || '');
   const [profileImage, setProfileImage] = useState(user?.profile_picture || user?.profileImage || null);
 
+  // Update state when user data changes
+  React.useEffect(() => {
+    if (user) {
+      setEditDisplayName(user?.display_name || user?.displayName || '');
+      setEditEmail(user?.email || '');
+      setEditBio(user?.bio || user?.display_bio || '');
+      setProfileImage(user?.profile_picture || user?.profileImage || null);
+    }
+  }, [user]);
+
   const handleLogout = () => {
     Alert.alert(
       'Logout',
@@ -53,15 +63,27 @@ export default function ProfileScreen({ navigation }) {
 
   const handleSaveProfile = async () => {
     try {
-      await updateProfile({
+      console.log('👤 ProfileScreen: Saving profile with data:', {
         displayName: editDisplayName,
         email: editEmail,
         bio: editBio,
         profileImage: profileImage,
       });
-      setIsEditModalVisible(false);
-      Alert.alert('Success', 'Profile updated successfully!');
-      console.log('👤 ProfileScreen: Profile updated successfully');
+      
+      const result = await updateProfile({
+        displayName: editDisplayName,
+        email: editEmail,
+        bio: editBio,
+        profileImage: profileImage,
+      });
+      
+      if (result && result.success) {
+        setIsEditModalVisible(false);
+        Alert.alert('Success', 'Profile updated successfully!');
+        console.log('👤 ProfileScreen: Profile updated successfully');
+      } else {
+        Alert.alert('Error', result?.error || 'Failed to update profile. Please try again.');
+      }
     } catch (error) {
       console.error('👤 ProfileScreen: Profile update error:', error);
       Alert.alert('Error', 'Failed to update profile. Please try again.');
@@ -128,7 +150,7 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <LinearGradient
-      colors={currentTheme.colors.background}
+      colors={currentTheme.colors.backgroundGradient || (currentTheme.mode === 'dark' ? ['#000000', '#1A1A1A'] : ['#FFFFFF', '#F8F9FA'])}
       className="flex-1"
     >
       <SafeAreaView className="flex-1">
@@ -349,7 +371,7 @@ export default function ProfileScreen({ navigation }) {
           presentationStyle="pageSheet"
         >
           <LinearGradient
-            colors={currentTheme.colors.background}
+            colors={currentTheme.colors.backgroundGradient || (currentTheme.mode === 'dark' ? ['#000000', '#1A1A1A'] : ['#FFFFFF', '#F8F9FA'])}
             className="flex-1"
           >
             <SafeAreaView className="flex-1">
