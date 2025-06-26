@@ -22,6 +22,7 @@ export default function StoryViewScreen({ navigation, route }) {
   const [viewTimer, setViewTimer] = useState(null);
   const [mediaError, setMediaError] = useState(false);
   const [mediaLoaded, setMediaLoaded] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   
   const { user } = useAuthStore();
   const { viewStory } = useSnapStore();
@@ -30,40 +31,74 @@ export default function StoryViewScreen({ navigation, route }) {
   console.log('📖 StoryViewScreen: Rendering with stories:', stories?.length, 'initialIndex:', initialIndex);
   console.log('📖 StoryViewScreen: Current story index:', currentStoryIndex);
 
+  const advanceStory = () => {
+    console.log('📖 StoryViewScreen: Advancing story');
+    if (viewTimer) clearTimeout(viewTimer);
+
+    if (currentStoryIndex < stories.length - 1) {
+      setCurrentStoryIndex(currentStoryIndex + 1);
+    } else {
+      navigation.goBack();
+    }
+  };
+
+  const goBackStory = () => {
+    console.log('📖 StoryViewScreen: Going back a story');
+    if (viewTimer) clearTimeout(viewTimer);
+
+    if (currentStoryIndex > 0) {
+      setCurrentStoryIndex(currentStoryIndex - 1);
+    } else {
+      navigation.goBack();
+    }
+  };
+
   useEffect(() => {
+    console.log('📖 StoryViewScreen: 🔄 useEffect triggered for story index:', currentStoryIndex);
+    console.log('📖 StoryViewScreen: 🔄 Stories length:', stories.length);
+    
     if (stories.length > 0) {
       const currentStory = stories[currentStoryIndex];
-      console.log('📖 StoryViewScreen: Current story:', currentStory);
+      console.log('📖 StoryViewScreen: 🔄 Current story:', JSON.stringify(currentStory, null, 2));
       
       // Reset media state for new story
+      console.log('📖 StoryViewScreen: 🔄 Resetting media state');
       setMediaError(false);
       setMediaLoaded(false);
+      setIsLoading(true);
       
       // Mark story as viewed
       const userId = user?.uid || user?.id || user?.userId;
-      console.log('📖 StoryViewScreen: Marking story as viewed by user:', userId);
+      console.log('📖 StoryViewScreen: 🔄 User ID for viewing:', userId);
+      console.log('📖 StoryViewScreen: 🔄 Story views before marking:', currentStory?.views);
       
       if (currentStory && userId && !currentStory.views?.includes(userId)) {
-        console.log('📖 StoryViewScreen: Calling viewStory for:', currentStory.id);
+        console.log('📖 StoryViewScreen: 🔄 User has not viewed this story, calling viewStory for:', currentStory.id);
         viewStory(currentStory.id, userId);
+      } else {
+        console.log('📖 StoryViewScreen: 🔄 Story already viewed or missing data:', { 
+          currentStory: !!currentStory, 
+          userId, 
+          alreadyViewed: currentStory?.views?.includes(userId) 
+        });
       }
       
-      // Start timer for auto-advance (stories show for 5 seconds)
-      const timer = setTimeout(() => {
-        console.log('📖 StoryViewScreen: Auto-advancing story');
-        if (currentStoryIndex < stories.length - 1) {
-          setCurrentStoryIndex(currentStoryIndex + 1);
-        } else {
-          console.log('📖 StoryViewScreen: Last story, going back');
-          navigation.goBack();
-        }
-      }, 5000);
-      
-      setViewTimer(timer);
-      
+      if (viewTimer) clearTimeout(viewTimer);
+
+      if (currentStory.mediaType === 'image') {
+        console.log('📖 StoryViewScreen: 🔄 This is an image, setting 5s timer');
+        const timer = setTimeout(advanceStory, 5000);
+        setViewTimer(timer);
+      } else {
+        console.log('📖 StoryViewScreen: 🔄 This is a video, will advance on completion');
+      }
+
       return () => {
-        if (timer) clearTimeout(timer);
+        console.log('📖 StoryViewScreen: 🔄 Cleaning up timers');
+        if (viewTimer) clearTimeout(viewTimer);
       };
+    } else {
+      console.log('📖 StoryViewScreen: 🔄 No stories available');
     }
   }, [currentStoryIndex]);
 
@@ -71,30 +106,18 @@ export default function StoryViewScreen({ navigation, route }) {
     const { locationX } = event.nativeEvent;
     const isRightSide = locationX > width / 2;
     
-    console.log('📖 StoryViewScreen: Tap detected, right side:', isRightSide);
+    console.log('📖 StoryViewScreen: 👆 Tap detected at x:', locationX, 'right side:', isRightSide);
+    console.log('📖 StoryViewScreen: 👆 Current story index:', currentStoryIndex, 'of', stories.length);
     
     if (viewTimer) {
+      console.log('📖 StoryViewScreen: 👆 Clearing view timer');
       clearTimeout(viewTimer);
     }
     
     if (isRightSide) {
-      // Tap right side - next story
-      if (currentStoryIndex < stories.length - 1) {
-        console.log('📖 StoryViewScreen: Moving to next story');
-        setCurrentStoryIndex(currentStoryIndex + 1);
-      } else {
-        console.log('📖 StoryViewScreen: Last story, going back');
-        navigation.goBack();
-      }
+      advanceStory();
     } else {
-      // Tap left side - previous story
-      if (currentStoryIndex > 0) {
-        console.log('📖 StoryViewScreen: Moving to previous story');
-        setCurrentStoryIndex(currentStoryIndex - 1);
-      } else {
-        console.log('📖 StoryViewScreen: First story, going back');
-        navigation.goBack();
-      }
+      goBackStory();
     }
   };
 
@@ -107,31 +130,43 @@ export default function StoryViewScreen({ navigation, route }) {
   };
 
   const handleMediaError = (error) => {
-    console.error('📖 StoryViewScreen: Media Error:', error);
-    console.error('📖 StoryViewScreen: Media Error Details:', JSON.stringify(error, null, 2));
+    console.log('🔴 StoryViewScreen: 🚨 handleMediaError TRIGGERED');
+    try {
+      const errorMessage = error?.nativeEvent?.error || error;
+      console.log('🔴 StoryViewScreen: 🚨 Raw Error Object:', error);
+      console.log('🔴 StoryViewScreen: 🚨 Error Message:', errorMessage);
+      console.log('🔴 StoryViewScreen: 🚨 Current story URL:', currentStory?.mediaUrl);
+    } catch (e) {
+      console.log('🔴 StoryViewScreen: 🚨 ERROR WHILE LOGGING ERROR:', e);
+    }
     setMediaError(true);
     setMediaLoaded(false);
+    setIsLoading(false);
   };
 
   const handleMediaLoad = () => {
-    console.log('📖 StoryViewScreen: Media Loaded successfully');
+    console.log('📖 StoryViewScreen: ✅ Media Loaded successfully');
+    console.log('📖 StoryViewScreen: ✅ Media URL:', currentStory?.mediaUrl);
     setMediaLoaded(true);
     setMediaError(false);
+    setIsLoading(false);
   };
 
   const onLoadStart = () => {
-    console.log('📖 StoryViewScreen: Media load started');
+    console.log('📖 StoryViewScreen: 🔄 Media load started');
+    console.log('📖 StoryViewScreen: 🔄 Starting to load:', currentStory?.mediaUrl);
+    setIsLoading(true);
     setMediaLoaded(false);
     setMediaError(false);
   };
 
   if (!stories || stories.length === 0) {
-    console.log('📖 StoryViewScreen: No stories available');
+    console.log('📖 StoryViewScreen: No stories available, returning empty view');
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: currentTheme.colors.background }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: 'black' }}>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <Ionicons name="alert-circle" size={64} color={currentTheme.colors.textSecondary} />
-          <Text style={{ color: currentTheme.colors.text, fontSize: 18, marginTop: 16 }}>
+          <Ionicons name="alert-circle" size={64} color="white" />
+          <Text style={{ color: 'white', fontSize: 18, marginTop: 16 }}>
             No stories available
           </Text>
           <TouchableOpacity 
@@ -140,16 +175,14 @@ export default function StoryViewScreen({ navigation, route }) {
               navigation.goBack();
             }}
             style={{
-              backgroundColor: currentTheme.colors.snapYellow,
+              backgroundColor: '#FFFC00',
               paddingHorizontal: 20,
               paddingVertical: 10,
               borderRadius: 20,
-              marginTop: 20,
+              marginTop: 16,
             }}
           >
-            <Text style={{ color: currentTheme.colors.textInverse, fontWeight: 'bold' }}>
-              Go Back
-            </Text>
+            <Text style={{ color: 'black', fontWeight: 'bold' }}>Go Back</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -157,7 +190,12 @@ export default function StoryViewScreen({ navigation, route }) {
   }
 
   const currentStory = stories[currentStoryIndex];
-  console.log('📖 StoryViewScreen: Rendering story:', currentStory);
+
+  if (!currentStory) {
+    console.warn('📖 StoryViewScreen: currentStory is undefined, going back');
+    navigation.goBack();
+    return null;
+  }
 
   const formatTimeAgo = (timestamp) => {
     const now = new Date();
@@ -178,118 +216,108 @@ export default function StoryViewScreen({ navigation, route }) {
     const mediaUrl = currentStory.mediaUrl || currentStory.media_url || currentStory.url;
     const mediaType = currentStory.mediaType || currentStory.media_type || 'image';
     
-    console.log('📖 StoryViewScreen: Media URL:', mediaUrl);
-    console.log('📖 StoryViewScreen: Media Type:', mediaType);
-    console.log('📖 StoryViewScreen: Media loaded:', mediaLoaded, 'Error:', mediaError);
+    console.log('📖 StoryViewScreen: 🎬 Media URL:', mediaUrl);
+    console.log('📖 StoryViewScreen: 🎬 Media Type:', mediaType);
+    console.log('📖 StoryViewScreen: 🎬 Media states - loaded:', mediaLoaded, 'error:', mediaError, 'loading:', isLoading);
 
-    // Check if media URL exists and is valid
-    if (!mediaUrl || mediaUrl.trim() === '') {
-      console.log('📖 StoryViewScreen: No media URL available');
+    if (!mediaUrl) {
+      console.log('📖 StoryViewScreen: 🎬 No media URL available');
       return (
         <View style={{ 
           width, 
-          height: height * 0.8, 
-          justifyContent: 'center', 
+          height: height * 0.8,
+          backgroundColor: 'black',
           alignItems: 'center',
-          backgroundColor: currentTheme.colors.surface,
+          justifyContent: 'center'
         }}>
-          <Ionicons name="image-outline" size={80} color={currentTheme.colors.textSecondary} />
-          <Text style={{ color: currentTheme.colors.text, fontSize: 18, marginTop: 16 }}>
-            Media not available
-          </Text>
-          <Text style={{ color: currentTheme.colors.textSecondary, fontSize: 14, marginTop: 8, textAlign: 'center', paddingHorizontal: 20 }}>
-            This story's media could not be loaded
-          </Text>
+          <Ionicons name="image-outline" size={64} color="white" />
+          <Text style={{ color: 'white', marginTop: 16 }}>No media available</Text>
         </View>
       );
     }
 
     if (mediaError) {
-      console.log('📖 StoryViewScreen: Showing media error state');
+      console.log('📖 StoryViewScreen: 🎬 Showing error state');
       return (
         <View style={{ 
           width, 
-          height: height * 0.8, 
-          justifyContent: 'center', 
+          height: height * 0.8,
+          backgroundColor: 'black',
           alignItems: 'center',
-          backgroundColor: currentTheme.colors.surface,
+          justifyContent: 'center'
         }}>
-          <Ionicons name="alert-circle" size={80} color={currentTheme.colors.error} />
-          <Text style={{ color: currentTheme.colors.text, fontSize: 18, marginTop: 16 }}>
+          <Ionicons name="alert-circle" size={64} color="#ff6b6b" />
+          <Text style={{ color: 'white', marginTop: 16, textAlign: 'center', paddingHorizontal: 32 }}>
             Failed to load media
           </Text>
-          <Text style={{ color: currentTheme.colors.textSecondary, fontSize: 14, marginTop: 8, textAlign: 'center', paddingHorizontal: 20 }}>
-            URL: {mediaUrl}
-          </Text>
-          <TouchableOpacity 
-            onPress={() => {
-              console.log('📖 StoryViewScreen: Retry button pressed');
-              setMediaError(false);
-              setMediaLoaded(false);
-            }}
-            style={{
-              backgroundColor: currentTheme.colors.snapYellow,
-              paddingHorizontal: 20,
-              paddingVertical: 10,
-              borderRadius: 20,
-              marginTop: 16,
-            }}
-          >
-            <Text style={{ color: currentTheme.colors.textInverse, fontWeight: 'bold' }}>
-              Retry
-            </Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-
-    // Show loading state
-    if (!mediaLoaded && !mediaError) {
-      console.log('📖 StoryViewScreen: Showing loading state');
-      return (
-        <View style={{ 
-          width, 
-          height: height * 0.8, 
-          justifyContent: 'center', 
-          alignItems: 'center',
-          backgroundColor: currentTheme.colors.surface,
-        }}>
-          <Ionicons name="hourglass" size={80} color={currentTheme.colors.snapYellow} />
-          <Text style={{ color: currentTheme.colors.text, fontSize: 18, marginTop: 16 }}>
-            Loading story...
+          <Text style={{ color: '#ccc', marginTop: 8, textAlign: 'center', paddingHorizontal: 32, fontSize: 12 }}>
+            {mediaUrl}
           </Text>
         </View>
       );
     }
 
-    // Render media based on type
     if (mediaType === 'video') {
-      console.log('📖 StoryViewScreen: Rendering video');
+      console.log('📖 StoryViewScreen: 🎬 Rendering video element');
       return (
         <Video
           source={{ uri: mediaUrl }}
-          rate={1.0}
-          volume={1.0}
-          isMuted={false}
-          resizeMode="contain"
           shouldPlay={true}
           isLooping={false}
-          style={{ width, height: height * 0.8 }}
-          onLoad={handleMediaLoad}
-          onError={handleMediaError}
+          resizeMode="contain"
+          style={{ 
+            width, 
+            height: height * 0.8,
+            backgroundColor: 'black'
+          }}
           onLoadStart={onLoadStart}
+          onLoad={(status) => {
+            console.log('📖 StoryViewScreen: 🎬 Video onLoad:', status);
+            if (status.isLoaded && !mediaLoaded) {
+              handleMediaLoad();
+            }
+          }}
+          onReadyForDisplay={() => {
+            console.log('📖 StoryViewScreen: 🎬 Video onReadyForDisplay');
+            handleMediaLoad();
+          }}
+          onError={(error) => {
+            console.log('📖 StoryViewScreen: 🎬 Video onError event:', error);
+            handleMediaError(error);
+          }}
+          onPlaybackStatusUpdate={(status) => {
+            // Only log important status changes to avoid spam
+            if (status.isLoaded && !mediaLoaded) {
+              console.log('📖 StoryViewScreen: 🎬 Video playback ready');
+              handleMediaLoad();
+            }
+            if (status.didJustFinish) {
+              console.log('📖 StoryViewScreen: 🎬 Video finished playing, advancing story');
+              advanceStory();
+            }
+          }}
         />
       );
     } else {
-      console.log('📖 StoryViewScreen: Rendering image');
+      console.log('📖 StoryViewScreen: 🎬 Rendering image element');
       return (
         <Image
           source={{ uri: mediaUrl }}
-          style={{ width, height: height * 0.8 }}
+          style={{ 
+            width, 
+            height: height * 0.8,
+            backgroundColor: 'black'
+          }}
           resizeMode="contain"
-          onLoad={handleMediaLoad}
-          onError={handleMediaError}
           onLoadStart={onLoadStart}
+          onLoad={(event) => {
+            console.log('📖 StoryViewScreen: 🎬 Image onLoad:', event.nativeEvent);
+            handleMediaLoad();
+          }}
+          onError={(error) => {
+            console.log('📖 StoryViewScreen: 🎬 Image onError event:', JSON.stringify(error.nativeEvent, null, 2));
+            handleMediaError(error);
+          }}
         />
       );
     }
@@ -372,21 +400,27 @@ export default function StoryViewScreen({ navigation, route }) {
         </View>
 
         {/* Story Content */}
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'black' }}>
           {renderMediaContent()}
           
-          {/* Loading indicator */}
-          {!mediaLoaded && !mediaError && currentStory.mediaUrl && (
+          {/* Loading indicator overlay */}
+          {isLoading && !mediaError && currentStory.mediaUrl && (
             <View style={{
               position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
               justifyContent: 'center',
               alignItems: 'center',
-              backgroundColor: 'rgba(0, 0, 0, 0.7)',
-              borderRadius: 10,
-              padding: 20,
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              zIndex: 5,
             }}>
-              <Ionicons name="hourglass" size={32} color="white" />
-              <Text style={{ color: 'white', marginTop: 8 }}>Loading...</Text>
+              <Ionicons name="hourglass" size={48} color="#FFFC00" />
+              <Text style={{ color: 'white', marginTop: 16, fontSize: 16 }}>Loading story...</Text>
+              <Text style={{ color: '#ccc', marginTop: 8, fontSize: 12, textAlign: 'center', paddingHorizontal: 32 }}>
+                {currentStory.mediaUrl}
+              </Text>
             </View>
           )}
           

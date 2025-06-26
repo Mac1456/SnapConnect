@@ -128,17 +128,18 @@ export const useSupabaseSnapStore = create((set, get) => ({
   // Send a story
   sendStory: async (mediaUri, mediaType, caption = '') => {
     try {
+      console.log('🟢 SupabaseSnapStore: 📖 Starting sendStory with:', { mediaUri, mediaType, caption });
       set({ loading: true, error: null });
       
       // Get current user from auth store with enhanced logging
       const authState = useSupabaseAuthStore.getState();
-      console.log('🟢 SupabaseSnapStore: Story - Auth state:', authState);
+      console.log('🟢 SupabaseSnapStore: 📖 Story - Auth state:', JSON.stringify(authState, null, 2));
       
       const user = authState.user;
-      console.log('🟢 SupabaseSnapStore: Story - User object:', user);
+      console.log('🟢 SupabaseSnapStore: 📖 Story - User object:', JSON.stringify(user, null, 2));
       
       if (!user) {
-        console.error('🟢 SupabaseSnapStore: Story - No authenticated user found');
+        console.error('🟢 SupabaseSnapStore: 📖 Story - No authenticated user found');
         set({ error: 'User not authenticated', loading: false });
         return;
       }
@@ -148,100 +149,112 @@ export const useSupabaseSnapStore = create((set, get) => ({
       
       if (user?.uid) {
         userId = user.uid;
-        console.log('🟢 SupabaseSnapStore: Story - Using user.uid:', userId);
+        console.log('🟢 SupabaseSnapStore: 📖 Story - Using user.uid:', userId);
       } else if (user?.id) {
         userId = user.id;
-        console.log('🟢 SupabaseSnapStore: Story - Using user.id:', userId);
+        console.log('🟢 SupabaseSnapStore: 📖 Story - Using user.id:', userId);
       } else if (user?.userId) {
         userId = user.userId;
-        console.log('🟢 SupabaseSnapStore: Story - Using user.userId:', userId);
+        console.log('🟢 SupabaseSnapStore: 📖 Story - Using user.userId:', userId);
       } else if (authState.userId) {
         userId = authState.userId;
-        console.log('🟢 SupabaseSnapStore: Story - Using authState.userId:', userId);
+        console.log('🟢 SupabaseSnapStore: 📖 Story - Using authState.userId:', userId);
       }
       
-      console.log('🟢 SupabaseSnapStore: Story - Final userId:', userId);
+      console.log('🟢 SupabaseSnapStore: 📖 Story - Final userId:', userId);
       
       if (!userId) {
-        console.error('🟢 SupabaseSnapStore: Story - No user ID found. User object:', JSON.stringify(user, null, 2));
-        console.error('🟢 SupabaseSnapStore: Story - Auth state:', JSON.stringify(authState, null, 2));
+        console.error('🟢 SupabaseSnapStore: 📖 Story - No user ID found. User object:', JSON.stringify(user, null, 2));
+        console.error('🟢 SupabaseSnapStore: 📖 Story - Auth state:', JSON.stringify(authState, null, 2));
         set({ error: 'User ID not found', loading: false });
         return;
       }
 
-      console.log('🟢 SupabaseSnapStore: Sending story for user:', userId);
+      console.log('🟢 SupabaseSnapStore: 📖 Sending story for user:', userId);
 
       // Upload media to Supabase Storage
       const fileName = `stories/${userId}/${Date.now()}.${mediaType === 'image' ? 'jpg' : 'mp4'}`;
       
-      console.log('🟢 SupabaseSnapStore: Story - Uploading file:', fileName);
+      console.log('🟢 SupabaseSnapStore: 📖 Story - Uploading file:', fileName);
+      console.log('🟢 SupabaseSnapStore: 📖 Story - Media URI:', mediaUri);
       
-      // Convert file URI to blob for upload
-      const response = await fetch(mediaUri);
-      const blob = await response.blob();
+      const formData = new FormData();
+      formData.append('file', {
+        uri: mediaUri,
+        name: fileName.split('/').pop(),
+        type: mediaType === 'image' ? 'image/jpeg' : 'video/mp4',
+      });
       
-      console.log('🟢 SupabaseSnapStore: Story - Blob created, size:', blob.size);
-      
+      console.log('🟢 SupabaseSnapStore: 📖 Story - FormData created for upload.');
+
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('media')
-        .upload(fileName, blob, {
+        .upload(fileName, formData, {
           contentType: mediaType === 'image' ? 'image/jpeg' : 'video/mp4',
           upsert: false
         });
 
       if (uploadError) {
-        console.error('🟢 SupabaseSnapStore: Story - Upload error:', uploadError);
+        console.error('�� SupabaseSnapStore: 📖 Story - Upload error:', uploadError.message);
+        console.error('🟢 SupabaseSnapStore: 📖 Story - Upload error details:', JSON.stringify(uploadError, null, 2));
         throw uploadError;
       }
 
-      console.log('🟢 SupabaseSnapStore: Story - Upload successful:', uploadData);
+      console.log('🟢 SupabaseSnapStore: 📖 Story - Upload successful:', JSON.stringify(uploadData, null, 2));
 
       // Get public URL
       const { data: { publicUrl } } = supabase.storage
         .from('media')
         .getPublicUrl(fileName);
 
-      console.log('🟢 SupabaseSnapStore: Story - Public URL:', publicUrl);
+      console.log('🟢 SupabaseSnapStore: 📖 Story - Public URL:', publicUrl);
 
       // Create story record
+      const storyRecord = {
+        user_id: userId,
+        username: user.username || user.email?.split('@')[0] || 'Unknown',
+        display_name: user.display_name || user.username || user.email?.split('@')[0] || 'Unknown',
+        media_url: publicUrl,
+        media_type: mediaType,
+        caption: caption,
+      };
+      
+      console.log('🟢 SupabaseSnapStore: 📖 Story - Creating story record:', JSON.stringify(storyRecord, null, 2));
+      
       const { data: storyData, error: storyError } = await supabase
         .from('stories')
-        .insert({
-          user_id: userId,
-          username: user.username || user.email?.split('@')[0] || 'Unknown',
-          display_name: user.display_name || user.username || user.email?.split('@')[0] || 'Unknown',
-          media_url: publicUrl,
-          media_type: mediaType,
-          caption: caption,
-          // Removed expires_at column reference - stories don't expire in our simplified MVP
-        })
+        .insert(storyRecord)
         .select()
         .single();
 
       if (storyError) {
-        console.error('🟢 SupabaseSnapStore: Story creation error:', storyError);
+        console.error('🟢 SupabaseSnapStore: 📖 Story creation error:', storyError.message);
+        console.error('🟢 SupabaseSnapStore: 📖 Story creation error details:', JSON.stringify(storyError, null, 2));
         throw storyError;
       }
 
-      console.log('🟢 SupabaseSnapStore: Story sent successfully:', storyData);
+      console.log('🟢 SupabaseSnapStore: 📖 Story sent successfully:', JSON.stringify(storyData, null, 2));
       
       // Refresh stories
-      await get().loadAllStories();
+      console.log('🟢 SupabaseSnapStore: 📖 Story - Refreshing stories list...');
+      await get().loadAllStories(userId);
       
       set({ loading: false });
       
       return storyData;
     } catch (error) {
-      console.error('🟢 SupabaseSnapStore: sendStory error:', error);
+      console.error('🟢 SupabaseSnapStore: 📖 sendStory error:', error.message);
+      console.error('🟢 SupabaseSnapStore: 📖 sendStory error stack:', error.stack);
       set({ error: error.message, loading: false });
       throw error;
     }
   },
 
   // Load all stories (for discover/explore feed)
-  loadAllStories: async () => {
+  loadAllStories: async (userId) => {
     try {
-      console.log('🟢 SupabaseSnapStore: Loading all stories...');
+      console.log('🟢 SupabaseSnapStore: 📖 Starting loadAllStories for user:', userId);
+      set({ loading: true, error: null });
       
       const { data, error } = await supabase
         .from('stories')
@@ -257,31 +270,48 @@ export const useSupabaseSnapStore = create((set, get) => ({
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('🟢 SupabaseSnapStore: Error loading all stories:', error);
-        set({ error: error.message });
+        console.error('🟢 SupabaseSnapStore: 📖 Error loading all stories:', error.message);
+        console.error('🟢 SupabaseSnapStore: 📖 Error details:', JSON.stringify(error, null, 2));
+        set({ error: error.message, loading: false });
         return;
       }
 
-      console.log('🟢 SupabaseSnapStore: Raw all stories data:', data?.length, 'stories');
+      console.log('🟢 SupabaseSnapStore: 📖 Raw stories data from database:', data?.length, 'stories');
+      console.log('🟢 SupabaseSnapStore: 📖 Raw stories data:', JSON.stringify(data, null, 2));
 
-      const processedStories = data?.map(story => ({
-        id: story.id,
-        userId: story.user_id,
-        username: story.username || story.user?.username || 'Unknown',
-        displayName: story.display_name || story.user?.display_name || story.username || 'Unknown',
-        mediaUrl: story.media_url,
-        mediaType: story.media_type,
-        caption: story.caption,
-        createdAt: new Date(story.created_at),
-        // Removed expiresAt reference since column doesn't exist
-        views: story.views || [],
-      })) || [];
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-      console.log('🟢 SupabaseSnapStore: Processed all stories:', processedStories.length, 'stories');
-      set({ allStories: processedStories });
+      const processedStories = data?.map(story => {
+        console.log('🟢 SupabaseSnapStore: 📖 Processing story:', story.id, 'from user:', story.user_id);
+        
+        const processedStory = {
+          id: story.id,
+          userId: story.user_id,
+          username: story.username || story.user?.username || 'Unknown',
+          displayName: story.display_name || story.user?.display_name || story.username || 'Unknown',
+          mediaUrl: story.media_url,
+          mediaType: story.media_type,
+          caption: story.caption,
+          createdAt: new Date(story.created_at),
+          views: story.views || [],
+        };
+        
+        console.log('🟢 SupabaseSnapStore: 📖 Processed story:', JSON.stringify(processedStory, null, 2));
+        return processedStory;
+      })
+      .filter(story => story.createdAt > twentyFourHoursAgo) || [];
+
+      console.log('🟢 SupabaseSnapStore: 📖 Final processed stories:', processedStories.length, 'stories');
+      console.log('🟢 SupabaseSnapStore: 📖 Story user IDs:', processedStories.map(s => s.userId));
+      console.log('🟢 SupabaseSnapStore: 📖 Story media URLs:', processedStories.map(s => s.mediaUrl));
+      
+      set({ stories: processedStories, loading: false });
+      return processedStories;
     } catch (error) {
-      console.error('🟢 SupabaseSnapStore: loadAllStories error:', error);
-      set({ error: error.message });
+      console.error('🟢 SupabaseSnapStore: 📖 loadAllStories error:', error.message);
+      console.error('🟢 SupabaseSnapStore: 📖 loadAllStories error stack:', error.stack);
+      set({ error: error.message, loading: false });
+      return [];
     }
   },
 
@@ -401,8 +431,50 @@ export const useSupabaseSnapStore = create((set, get) => ({
     });
   },
 
+  // Set up real-time subscription for stories
+  setupStoriesListener: (userId) => {
+    if (!userId) {
+      console.log('🟢 SupabaseSnapStore: 📖 No userId provided for stories listener');
+      return;
+    }
+    
+    console.log('🟢 SupabaseSnapStore: 📖 Setting up stories listener for:', userId);
+    
+    // Clean up existing subscription
+    get().unsubscribeFromStories?.();
+    
+    const subscription = supabase
+      .channel('stories')
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'stories'
+        }, 
+        (payload) => {
+          console.log('🟢 SupabaseSnapStore: 📖 Stories change detected:', payload);
+          console.log('🟢 SupabaseSnapStore: 📖 Stories change type:', payload.eventType);
+          console.log('🟢 SupabaseSnapStore: 📖 Stories change data:', JSON.stringify(payload, null, 2));
+          
+          // Reload stories when changes occur
+          console.log('🟢 SupabaseSnapStore: 📖 Refreshing stories due to realtime update');
+          get().loadAllStories(userId);
+        }
+      )
+      .subscribe();
+
+    // Store unsubscribe function
+    set({ 
+      unsubscribeFromStories: () => {
+        console.log('🟢 SupabaseSnapStore: 📖 Unsubscribing from stories');
+        supabase.removeChannel(subscription);
+      }
+    });
+  },
+
   // Clean up subscriptions
   unsubscribeFromSnaps: null,
+  unsubscribeFromStories: null,
 
   // Clear error
   clearError: () => set({ error: null }),
@@ -434,52 +506,67 @@ export const useSupabaseSnapStore = create((set, get) => ({
   // View story function - missing function that was causing the error
   viewStory: async (storyId, userId) => {
     try {
-      console.log('🟢 SupabaseSnapStore: Viewing story:', storyId, 'by user:', userId);
+      console.log('🟢 SupabaseSnapStore: 📖 VIEWSTORY_START for story:', storyId, 'by user:', userId);
       
-      // First get the current story to check existing views
+      if (!storyId || !userId) {
+        console.log('🔴 SupabaseSnapStore: 📖 VIEWSTORY_ERROR: Missing storyId or userId.');
+        return;
+      }
+      
+      console.log('🟢 SupabaseSnapStore: 📖 VIEWSTORY_FETCHING_STORY');
       const { data: storyData, error: fetchError } = await supabase
         .from('stories')
         .select('views')
         .eq('id', storyId)
         .single();
 
-      if (fetchError) {
-        console.error('🟢 SupabaseSnapStore: Error fetching story for view:', fetchError);
+      if (fetchError || !storyData) {
+        console.log('🔴 SupabaseSnapStore: 📖 VIEWSTORY_ERROR: Failed to fetch story. Error:', fetchError?.message);
+        console.log('🔴 SupabaseSnapStore: 📖 Story data was null:', !storyData);
         return;
       }
 
-      // Check if user has already viewed this story
-      const currentViews = storyData?.views || [];
-      if (currentViews.includes(userId)) {
-        console.log('🟢 SupabaseSnapStore: User has already viewed this story');
-        return;
-      }
+      console.log('🟢 SupabaseSnapStore: 📖 VIEWSTORY_FETCH_SUCCESS. Data:', JSON.stringify(storyData, null, 2));
 
-      // Add user to views array
-      const updatedViews = [...currentViews, userId];
+      const currentViews = storyData.views || [];
       
-      const { error } = await supabase
+      if (currentViews.includes(userId)) {
+        console.log('🟢 SupabaseSnapStore: 📖 VIEWSTORY_ALREADY_VIEWED');
+        return;
+      }
+
+      const updatedViews = [...currentViews, userId];
+      console.log('🟢 SupabaseSnapStore: 📖 VIEWSTORY_UPDATING_VIEWS:', updatedViews);
+      
+      const { error: updateError } = await supabase
         .from('stories')
         .update({ views: updatedViews })
         .eq('id', storyId);
 
-      if (error) {
-        console.error('🟢 SupabaseSnapStore: Error updating story views:', error);
-        throw error;
+      if (updateError) {
+        console.log('🔴 SupabaseSnapStore: 📖 VIEWSTORY_ERROR: Failed to update views. Error:', updateError.message);
+        return; // Return instead of throwing to prevent crash
       }
 
-      // Update local state
-      const { stories } = get();
-      const updatedStories = stories.map(story => 
-        story.id === storyId 
-          ? { ...story, views: updatedViews }
-          : story
-      );
-      set({ stories: updatedStories });
+      console.log('🟢 SupabaseSnapStore: 📖 VIEWSTORY_UPDATE_SUCCESS');
       
-      console.log('🟢 SupabaseSnapStore: Story view recorded successfully');
+      // Update local state more safely
+      const { stories } = get();
+      if (stories && Array.isArray(stories)) {
+        const updatedStories = stories.map(story => 
+          story.id === storyId 
+            ? { ...story, views: updatedViews }
+            : story
+        );
+        set({ stories: updatedStories });
+        console.log('🟢 SupabaseSnapStore: 📖 VIEWSTORY_LOCAL_STATE_UPDATED');
+      } else {
+        console.log('🟡 SupabaseSnapStore: 📖 VIEWSTORY_WARNING: Local stories state was not an array.');
+      }
+      
     } catch (error) {
-      console.error('🟢 SupabaseSnapStore: viewStory error:', error);
+      console.log('🔴 SupabaseSnapStore: 📖 VIEWSTORY_UNHANDLED_ERROR:', error.message);
+      console.log('🔴 SupabaseSnapStore: 📖 VIEWSTORY_UNHANDLED_ERROR_STACK:', error.stack);
     }
   },
 
@@ -758,5 +845,53 @@ export const useSupabaseSnapStore = create((set, get) => ({
       console.error('🟢 SupabaseSnapStore: loadSnaps error:', error);
       set({ error: error.message });
     }
-  }
+  },
+
+  deleteStory: async (storyId, mediaUrl) => {
+    try {
+      console.log('🟢 SupabaseSnapStore: 🗑️ Deleting story:', storyId);
+      set({ loading: true, error: null });
+
+      // 1. Delete story from database
+      const { error: dbError } = await supabase
+        .from('stories')
+        .delete()
+        .eq('id', storyId);
+
+      if (dbError) {
+        console.error('🟢 SupabaseSnapStore: 🗑️ Error deleting story from database:', dbError.message);
+        throw dbError;
+      }
+      console.log('🟢 SupabaseSnapStore: 🗑️ Story deleted from database successfully.');
+
+      // 2. Delete media from storage
+      if (mediaUrl) {
+        // Correctly parse the file path from the full URL
+        const path = new URL(mediaUrl).pathname;
+        const filePath = path.substring(path.indexOf('/stories/'));
+        
+        const { error: storageError } = await supabase.storage
+          .from('media')
+          .remove([filePath.slice(1)]); // Remove leading '/'
+          
+        if (storageError) {
+          // Log error but don't throw, as the DB entry is already gone
+          console.error('🟢 SupabaseSnapStore: 🗑️ Error deleting story media from storage:', storageError.message);
+        } else {
+          console.log('🟢 SupabaseSnapStore: 🗑️ Story media deleted from storage successfully.');
+        }
+      }
+
+      // 3. Update local state
+      set((state) => ({
+        stories: state.stories.filter((story) => story.id !== storyId),
+        loading: false,
+      }));
+      console.log('🟢 SupabaseSnapStore: 🗑️ Story removed from local state.');
+
+    } catch (error) {
+      console.error('🟢 SupabaseSnapStore: 🗑️ deleteStory error:', error.message);
+      set({ error: error.message, loading: false });
+    }
+  },
 })); 

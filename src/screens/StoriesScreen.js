@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,16 +20,33 @@ export default function StoriesScreen({ navigation }) {
   const { user } = useAuthStore();
   const { currentTheme } = useThemeStore();
   const parentNavigation = useNavigation();
-  const { stories, listenToStories, loadAllStories } = useSnapStore();
+  const {
+    stories,
+    listenToStories,
+    loadAllStories,
+    setupStoriesListener,
+    deleteStory,
+  } = useSnapStore();
   const { friends, getFriends } = useFriendStore();
 
   useEffect(() => {
     if (user && user.uid) {
-      console.log('📖 StoriesScreen: Loading friends and stories for user:', user.uid);
+      console.log('📖 StoriesScreen: 🔄 useEffect triggered - Loading friends and stories for user:', user.uid);
+      console.log('📖 StoriesScreen: 🔄 User object:', JSON.stringify(user, null, 2));
+      
       // Load friends first
+      console.log('📖 StoriesScreen: 🔄 Calling getFriends...');
       getFriends(user.uid);
+      
       // Load all stories (including user's own and public stories)
+      console.log('📖 StoriesScreen: 🔄 Calling loadAllStories...');
       loadAllStories(user.uid);
+      
+      // Set up real-time listener for stories
+      console.log('📖 StoriesScreen: 🔄 Setting up stories real-time listener...');
+      setupStoriesListener(user.uid);
+    } else {
+      console.log('📖 StoriesScreen: 🔄 useEffect - No user or user.uid:', { user, uid: user?.uid });
     }
   }, [user]);
 
@@ -36,15 +54,25 @@ export default function StoriesScreen({ navigation }) {
   useFocusEffect(
     React.useCallback(() => {
       if (user && user.uid) {
-        console.log('📖 StoriesScreen: Screen focused, refreshing stories and friends for user:', user.uid);
+        console.log('📖 StoriesScreen: 🎯 Screen focused, refreshing stories and friends for user:', user.uid);
+        console.log('📖 StoriesScreen: 🎯 Focus - Current stories count:', stories.length);
+        console.log('📖 StoriesScreen: 🎯 Focus - Current friends count:', friends.length);
+        
         getFriends(user.uid);
         loadAllStories(user.uid);
+      } else {
+        console.log('📖 StoriesScreen: 🎯 Focus - No user or user.uid:', { user, uid: user?.uid });
       }
     }, [user, loadAllStories, getFriends])
   );
 
   // Group stories by user
+  console.log('📖 StoriesScreen: 📊 Starting to group stories by user...');
+  console.log('📖 StoriesScreen: 📊 Total stories to process:', stories.length);
+  console.log('📖 StoriesScreen: 📊 Stories array:', JSON.stringify(stories, null, 2));
+  
   const storiesByUser = stories.reduce((acc, story) => {
+    console.log('📖 StoriesScreen: 📊 Processing story:', story.id, 'from user:', story.userId);
     if (!acc[story.userId]) {
       acc[story.userId] = [];
     }
@@ -52,44 +80,87 @@ export default function StoriesScreen({ navigation }) {
     return acc;
   }, {});
 
+  console.log('📖 StoriesScreen: 📊 Stories grouped by user:', JSON.stringify(storiesByUser, null, 2));
+
   // Get friend IDs for filtering
+  console.log('📖 StoriesScreen: 📊 Processing friends for filtering...');
+  console.log('📖 StoriesScreen: 📊 Friends array:', JSON.stringify(friends, null, 2));
+  
   const friendIds = friends.map(friend => friend.id);
-  console.log('📖 StoriesScreen: Friend IDs:', friendIds);
-  console.log('📖 StoriesScreen: All story user IDs:', Object.keys(storiesByUser));
+  console.log('📖 StoriesScreen: 📊 Friend IDs:', friendIds);
+  console.log('📖 StoriesScreen: 📊 All story user IDs:', Object.keys(storiesByUser));
 
   // Filter stories to only show friends' stories (plus user's own)
+  console.log('📖 StoriesScreen: 🔍 Starting to filter stories...');
+  console.log('📖 StoriesScreen: 🔍 Current user ID:', user?.uid);
+  console.log('📖 StoriesScreen: 🔍 Available story user IDs:', Object.keys(storiesByUser));
+  console.log('📖 StoriesScreen: 🔍 Friend IDs for filtering:', friendIds);
+  
   const friendStoriesByUser = Object.keys(storiesByUser)
     .filter(userId => {
       // Include user's own stories or friends' stories
       const isOwnStory = user && user.uid && userId === user.uid;
       const isFriendStory = friendIds.includes(userId);
-      console.log('📖 StoriesScreen: Checking userId:', userId, 'isOwnStory:', isOwnStory, 'isFriendStory:', isFriendStory);
-      return isOwnStory || isFriendStory;
+      console.log('📖 StoriesScreen: 🔍 Checking userId:', userId, 'isOwnStory:', isOwnStory, 'isFriendStory:', isFriendStory);
+      const shouldInclude = isOwnStory || isFriendStory;
+      console.log('📖 StoriesScreen: 🔍 Should include user', userId, ':', shouldInclude);
+      return shouldInclude;
     })
     .reduce((acc, userId) => {
+      console.log('📖 StoriesScreen: 🔍 Adding stories for user:', userId, 'count:', storiesByUser[userId].length);
       acc[userId] = storiesByUser[userId];
       return acc;
     }, {});
 
-  console.log('📖 StoriesScreen: Filtered friend stories:', Object.keys(friendStoriesByUser));
+  console.log('📖 StoriesScreen: 🔍 Filtered friend stories user IDs:', Object.keys(friendStoriesByUser));
+  console.log('📖 StoriesScreen: 🔍 Filtered friend stories data:', JSON.stringify(friendStoriesByUser, null, 2));
 
   const navigateToCamera = () => {
-    console.log('📖 StoriesScreen: Camera button pressed');
+    console.log('📖 StoriesScreen: 📸 Camera button pressed');
+    console.log('📖 StoriesScreen: 📸 Navigation object:', !!navigation);
+    console.log('📖 StoriesScreen: 📸 Parent navigation object:', !!parentNavigation);
+    
     try {
       // Try to get the parent navigation (stack navigator)
       const rootNavigation = parentNavigation.getParent();
+      console.log('📖 StoriesScreen: 📸 Root navigation found:', !!rootNavigation);
+      
       if (rootNavigation) {
-        console.log('📖 StoriesScreen: Using parent navigation to navigate to Camera');
+        console.log('📖 StoriesScreen: 📸 Using parent navigation to navigate to Camera');
         rootNavigation.navigate('Camera');
       } else {
-        console.log('📖 StoriesScreen: Using direct navigation to Camera');
+        console.log('📖 StoriesScreen: 📸 Using direct navigation to Camera');
         navigation.navigate('Camera');
       }
     } catch (error) {
-      console.error('📖 StoriesScreen: Navigation error:', error);
+      console.error('📖 StoriesScreen: 📸 Navigation error:', error.message);
+      console.error('📖 StoriesScreen: 📸 Navigation error stack:', error.stack);
       // Fallback navigation
+      console.log('📖 StoriesScreen: 📸 Using fallback navigation');
       navigation.navigate('Camera');
     }
+  };
+
+  const handleDeleteStory = (story) => {
+    Alert.alert(
+      'Delete Story',
+      'Are you sure you want to delete this story? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          onPress: () => {
+            console.log('🗑️ Deleting story:', story.id);
+            deleteStory(story.id, story.mediaUrl);
+          },
+          style: 'destructive',
+        },
+      ],
+      { cancelable: false }
+    );
   };
 
   const formatTimeAgo = (timestamp) => {
@@ -155,6 +226,7 @@ export default function StoriesScreen({ navigation }) {
                     stories: friendStoriesByUser[user.uid], 
                     initialIndex: friendStoriesByUser[user.uid].indexOf(story) 
                   })}
+                  onLongPress={() => handleDeleteStory(story)}
                   className="mr-4"
                 >
                   <View 
@@ -162,13 +234,31 @@ export default function StoriesScreen({ navigation }) {
                     className="w-16 h-16 rounded-full overflow-hidden border-2"
                   >
                     {story.mediaType === 'image' ? (
-                      <Image source={{ uri: story.mediaUrl }} className="w-full h-full" />
-                    ) : (
+                      <Image 
+                        source={{ uri: story.mediaUrl }} 
+                        className="w-full h-full"
+                        style={{ backgroundColor: '#f0f0f0' }}
+                        resizeMode="cover"
+                        onError={(error) => {
+                          console.log('📖 StoriesScreen: Preview image failed to load:', story.mediaUrl, error);
+                        }}
+                        onLoad={() => {
+                          console.log('📖 StoriesScreen: Preview image loaded successfully:', story.mediaUrl);
+                        }}
+                      />
+                    ) : story.mediaType === 'video' ? (
                       <View 
-                        style={{ backgroundColor: currentTheme.colors.tertiary }}
+                        style={{ backgroundColor: '#333' }}
                         className="w-full h-full items-center justify-center"
                       >
-                        <Ionicons name="play" size={20} color={currentTheme.colors.text} />
+                        <Ionicons name="play" size={20} color="white" />
+                      </View>
+                    ) : (
+                      <View 
+                        style={{ backgroundColor: '#f0f0f0' }}
+                        className="w-full h-full items-center justify-center"
+                      >
+                        <Ionicons name="image" size={20} color="#666" />
                       </View>
                     )}
                   </View>
@@ -209,13 +299,31 @@ export default function StoriesScreen({ navigation }) {
                       className="w-16 h-16 rounded-full overflow-hidden border-2 mr-3"
                     >
                       {latestStory.mediaType === 'image' ? (
-                        <Image source={{ uri: latestStory.mediaUrl }} className="w-full h-full" />
-                      ) : (
+                        <Image 
+                          source={{ uri: latestStory.mediaUrl }} 
+                          className="w-full h-full"
+                          style={{ backgroundColor: '#f0f0f0' }}
+                          resizeMode="cover"
+                          onError={(error) => {
+                            console.log('📖 StoriesScreen: Friend story preview failed:', latestStory.mediaUrl, error);
+                          }}
+                          onLoad={() => {
+                            console.log('📖 StoriesScreen: Friend story preview loaded:', latestStory.mediaUrl);
+                          }}
+                        />
+                      ) : latestStory.mediaType === 'video' ? (
                         <View 
-                          style={{ backgroundColor: currentTheme.colors.tertiary }}
+                          style={{ backgroundColor: '#333' }}
                           className="w-full h-full items-center justify-center"
                         >
-                          <Ionicons name="play" size={20} color={currentTheme.colors.text} />
+                           <Ionicons name="play" size={20} color="white" />
+                        </View>
+                      ) : (
+                        <View 
+                          style={{ backgroundColor: '#f0f0f0' }}
+                          className="w-full h-full items-center justify-center"
+                        >
+                          <Ionicons name="image" size={20} color="#666" />
                         </View>
                       )}
                     </View>
