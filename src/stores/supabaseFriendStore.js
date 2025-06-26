@@ -2,372 +2,268 @@ import { create } from 'zustand';
 import { supabase } from '../../supabase.config';
 import { useSupabaseAuthStore } from './supabaseAuthStore';
 
+// =================================================================
+//  revamped supabaseFriendStore.js
+//
+// This store has been completely overhauled to fix critical bugs
+// in friend request handling and to simplify the overall logic.
+//
+// Key Improvements:
+// 1. Atomic Friend Requests: Uses a Supabase RPC function 
+//    (accept_friend_request) to ensure that accepting a friend
+//    request is an atomic operation, preventing partial or
+//    failed states.
+// 2. Simplified State Management: Consolidates multiple redundant
+//    functions for fetching friend requests into a single,
+//    reliable source of truth.
+// 3. Robust Error Handling: Adds clearer error logging and handles
+//    edge cases more gracefully.
+// =================================================================
+
 export const useSupabaseFriendStore = create((set, get) => ({
   friends: [],
   friendRequests: [],
   loading: false,
   error: null,
+  
+  // A helper function to get the current user's ID.
+  _getCurrentUserId: () => {
+    const { user } = useSupabaseAuthStore.getState();
+    return user?.id || null;
+  },
 
-  // Search users by username or display name
+  // Search for users to add as friends.
   searchUsers: async (searchQuery) => {
+    set({ loading: true, error: null });
     try {
-      set({ loading: true, error: null });
-      
-      console.log('🟢 SupabaseFriendStore: Searching for users with query:', searchQuery);
-      
+      const currentUserId = get()._getCurrentUserId();
+      if (!currentUserId) {
+        throw new Error('User not authenticated');
+      }
+
+      console.log('🟢 FriendStore: Searching for users with query:', searchQuery);
       const { data, error } = await supabase
         .from('users')
         .select('id, username, display_name, email, profile_picture')
-        .or(`username.ilike.%${searchQuery}%,display_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`)
+        .or(`username.ilike.%${searchQuery}%,display_name.ilike.%${searchQuery}%`)
+        .not('id', 'eq', currentUserId) // Exclude the current user from search results
         .limit(20);
 
-      if (error) {
-        console.error('🟢 SupabaseFriendStore: searchUsers error:', error);
-        set({ error: error.message, loading: false });
-        return [];
-      }
+      if (error) throw error;
 
-      console.log('🟢 SupabaseFriendStore: Search results:', data?.length || 0, 'users found');
+      console.log('🟢 FriendStore: Found', data.length, 'users.');
       set({ loading: false });
       return data || [];
-      
     } catch (error) {
-      console.error('🟢 SupabaseFriendStore: searchUsers error:', error);
+      console.error('🔴 FriendStore: searchUsers error:', error.message);
       set({ error: error.message, loading: false });
       return [];
     }
   },
 
-  // Send friend request
-  sendFriendRequest: async (targetUserId, targetUsername) => {
+  // Send a friend request to another user.
+  sendFriendRequest: async (targetUserId) => {
+    set({ loading: true, error: null });
     try {
-      set({ loading: true, error: null });
-      
-      // Get current user from Supabase auth
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      
-      if (authError || !user) {
-        console.error('🟢 SupabaseFriendStore: No authenticated user found:', authError);
-        set({ error: 'User not authenticated', loading: false });
-        return;
+      const currentUserId = get()._getCurrentUserId();
+      if (!currentUserId) {
+        throw new Error('User not authenticated');
       }
 
-      // Get user profile for username
-      const { data: profile, error: profileError } = await supabase
-        .from('users')
-        .select('username, display_name')
-        .eq('id', user.id)
-        .single();
-
-      if (profileError) {
-        console.error('🟢 SupabaseFriendStore: Error getting user profile:', profileError);
-        set({ error: 'Failed to get user profile', loading: false });
-        return;
-      }
-
-      console.log('🟢 SupabaseFriendStore: Sending friend request from:', user.id, 'to:', targetUserId);
-      
-      // Check if friend request already exists
-      const { data: existingRequest, error: checkError } = await supabase
-        .from('friend_requests')
-        .select('id')
-        .eq('requester_id', user.id)
-        .eq('requested_id', targetUserId)
-        .single();
-
-      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows returned
-        console.error('🟢 SupabaseFriendStore: Error checking existing request:', checkError);
-        set({ error: checkError.message, loading: false });
-        return;
-      }
-
-      if (existingRequest) {
-        console.log('🟢 SupabaseFriendStore: Friend request already exists');
-        set({ error: 'Friend request already sent', loading: false });
-        return;
-      }
-      
-      // Insert friend request
-      const { error } = await supabase
-        .from('friend_requests')
-        .insert({
-          requester_id: user.id,
-          requested_id: targetUserId,
-          requester_username: profile.username || user.email?.split('@')[0] || 'unknown',
-          requester_display_name: profile.display_name || profile.username || user.email?.split('@')[0] || 'Unknown User',
-          status: 'pending',
-          created_at: new Date().toISOString(),
-        });
+      console.log('🟢 FriendStore: Sending friend request to:', targetUserId);
+      const { error } = await supabase.from('friend_requests').insert({
+        requester_id: currentUserId,
+        requested_id: targetUserId,
+      });
 
       if (error) {
-        console.error('🟢 SupabaseFriendStore: sendFriendRequest error:', error);
-        if (error.code === '23505') { // Unique constraint violation
-          set({ error: 'Friend request already sent', loading: false });
-        } else {
-          set({ error: error.message, loading: false });
+        // Handle cases where a request already exists.
+        if (error.code === '23505') {
+          console.warn('🟡 FriendStore: Friend request already exists.');
+          throw new Error('Friend request already sent.');
         }
-        return;
+        throw error;
       }
 
-      console.log('🟢 SupabaseFriendStore: Friend request sent successfully');
+      console.log('🟢 FriendStore: Friend request sent successfully.');
       set({ loading: false });
-      
     } catch (error) {
-      console.error('🟢 SupabaseFriendStore: sendFriendRequest error:', error);
+      console.error('🔴 FriendStore: sendFriendRequest error:', error.message);
       set({ error: error.message, loading: false });
     }
   },
 
-  // Accept friend request
-  acceptFriendRequest: async (requestId, requesterId) => {
+  // Accept a friend request using the new RPC function.
+  acceptFriendRequest: async (request) => {
+    set({ loading: true, error: null });
     try {
-      set({ loading: true, error: null });
+      const currentUserId = get()._getCurrentUserId();
+      if (!currentUserId || !request) {
+        throw new Error('User or request is invalid.');
+      }
       
-      const authState = useSupabaseAuthStore.getState();
-      const currentUserId = authState.user?.uid || authState.user?.id;
-      
-      if (!currentUserId) {
-        set({ error: 'User not authenticated', loading: false });
-        return;
-      }
+      console.log('🟢 FriendStore: Accepting friend request ID:', request.id);
+      const { error } = await supabase.rpc('accept_friend_request', {
+        request_id: request.id,
+        user1_id: currentUserId,
+        user2_id: request.requester_id,
+      });
 
-      console.log('🟢 SupabaseFriendStore: Accepting friend request:', requestId, 'from:', requesterId);
+      if (error) throw error;
 
-      // First, check if friendship already exists to avoid duplicate key error
-      const { data: existingFriendship, error: checkError } = await supabase
-        .from('friendships')
-        .select('id')
-        .or(`and(user_id.eq.${currentUserId},friend_id.eq.${requesterId}),and(user_id.eq.${requesterId},friend_id.eq.${currentUserId})`)
-        .limit(1);
+      console.log('🟢 FriendStore: Friend request accepted successfully.');
+      // Refresh friends and requests lists
+      get().getFriends();
+      get().getFriendRequests();
+      set({ loading: false });
 
-      if (checkError && checkError.code !== 'PGRST116') {
-        console.error('🟢 SupabaseFriendStore: Error checking existing friendship:', checkError);
-      }
+    } catch (error) {
+      console.error('🔴 FriendStore: acceptFriendRequest error:', error.message);
+      set({ error: 'Failed to accept friend request.', loading: false });
+    }
+  },
 
-      // Only create friendships if they don't already exist
-      if (!existingFriendship || existingFriendship.length === 0) {
-        // Create bidirectional friendship
-        const { error: friendError1 } = await supabase
-          .from('friendships')
-          .insert({ user_id: currentUserId, friend_id: requesterId });
-
-        const { error: friendError2 } = await supabase
-          .from('friendships')
-          .insert({ user_id: requesterId, friend_id: currentUserId });
-
-        if (friendError1 || friendError2) {
-          console.error('🟢 SupabaseFriendStore: acceptFriendRequest friendship creation errors:', {
-            friendError1,
-            friendError2
-          });
-          
-          // Only set error if it's not a duplicate key violation
-          if (friendError1?.code !== '23505' && friendError2?.code !== '23505') {
-            set({ error: 'Failed to create friendship', loading: false });
-            return;
-          }
-        }
-      }
-
-      // Delete the friend request
-      const { error: requestError } = await supabase
+  // Reject (or cancel) a friend request.
+  rejectFriendRequest: async (requestId) => {
+    set({ loading: true, error: null });
+    try {
+      console.log('🟢 FriendStore: Rejecting friend request ID:', requestId);
+      const { error } = await supabase
         .from('friend_requests')
         .delete()
         .eq('id', requestId);
 
-      if (requestError) {
-        console.error('🟢 SupabaseFriendStore: acceptFriendRequest request deletion error:', requestError);
-        // Don't fail the whole operation if request deletion fails
-      }
+      if (error) throw error;
 
-      console.log('🟢 SupabaseFriendStore: Friend request accepted successfully');
-      
-      // Refresh the friend requests and friends lists
-      await get().getFriendRequests(currentUserId);
-      await get().getFriends(currentUserId);
-      
-      set({ loading: false });
-      
+      console.log('🟢 FriendStore: Friend request rejected successfully.');
+      // Refresh requests list
+      set(state => ({
+        friendRequests: state.friendRequests.filter(req => req.id !== requestId),
+        loading: false
+      }));
+
     } catch (error) {
-      console.error('🟢 SupabaseFriendStore: acceptFriendRequest error:', error);
-      set({ error: error.message, loading: false });
+      console.error('🔴 FriendStore: rejectFriendRequest error:', error.message);
+      set({ error: 'Failed to reject friend request.', loading: false });
     }
   },
 
-  // Reject friend request
-  rejectFriendRequest: async (requestId) => {
+  // Get the current user's list of friends.
+  getFriends: async () => {
+    set({ loading: true, error: null });
     try {
-      set({ loading: true, error: null });
-      
-      // Get current user from Supabase auth
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      
-      if (authError || !user) {
-        console.error('🟢 SupabaseFriendStore: No authenticated user found:', authError);
-        set({ error: 'User not authenticated', loading: false });
-        return;
-      }
-      
-      const { error } = await supabase
-        .from('friend_requests')
-        .delete()
-        .eq('id', requestId)
-        .eq('requested_id', user.id);
-
-      if (error) {
-        console.error('🟢 SupabaseFriendStore: rejectFriendRequest error:', error);
-        set({ error: error.message, loading: false });
-        return;
+      const currentUserId = get()._getCurrentUserId();
+      if (!currentUserId) {
+        throw new Error('User not authenticated');
       }
 
-      console.log('🟢 SupabaseFriendStore: Friend request rejected successfully');
-      set({ loading: false });
-      
-    } catch (error) {
-      console.error('🟢 SupabaseFriendStore: rejectFriendRequest error:', error);
-      set({ error: error.message, loading: false });
-    }
-  },
-
-  // Get friends list
-  getFriends: async (userId) => {
-    try {
+      console.log('🟢 FriendStore: Fetching friends for user:', currentUserId);
       const { data, error } = await supabase
         .from('friendships')
-        .select(`
-          friend_id,
-          users!friendships_friend_id_fkey (
-            id,
-            username,
-            display_name,
-            email,
-            profile_picture
-          )
-        `)
-        .eq('user_id', userId);
+        .select('friend:friend_id(id, username, display_name, email, profile_picture)')
+        .eq('user_id', currentUserId);
 
-      if (error) {
-        console.error('🟢 SupabaseFriendStore: getFriends error:', error);
-        set({ error: error.message });
-        return;
-      }
+      if (error) throw error;
 
-      const friends = data?.map(item => ({
-        id: item.users.id,
-        username: item.users.username,
-        displayName: item.users.display_name,
-        email: item.users.email,
-        profilePicture: item.users.profile_picture,
-      })) || [];
+      const friends = data.map(item => item.friend) || [];
+      console.log('🟢 FriendStore: Found', friends.length, 'friends.');
+      set({ friends, loading: false });
+      return friends;
 
-      set({ friends });
-      
     } catch (error) {
-      console.error('🟢 SupabaseFriendStore: getFriends error:', error);
-      set({ error: error.message });
+      console.error('🔴 FriendStore: getFriends error:', error.message);
+      set({ error: error.message, loading: false });
+      return [];
     }
   },
 
-  // Listen to friend requests
-  listenToFriendRequests: (userId) => {
-    console.log('🟢 SupabaseFriendStore: Setting up friend requests listener for:', userId);
-    
-    const subscription = supabase
-      .channel('friend_requests')
+  // Get all incoming friend requests for the current user.
+  getFriendRequests: async () => {
+    set({ loading: true, error: null });
+    try {
+      const currentUserId = get()._getCurrentUserId();
+      if (!currentUserId) {
+        throw new Error('User not authenticated');
+      }
+      
+      console.log('🟢 FriendStore: Fetching friend requests for user:', currentUserId);
+      const { data, error } = await supabase
+        .from('friend_requests')
+        .select('*, requester:requester_id(id, username, display_name, email, profile_picture)')
+        .eq('requested_id', currentUserId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      
+      const friendRequests = data || [];
+      console.log('🟢 FriendStore: Found', friendRequests.length, 'friend requests.');
+      set({ friendRequests, loading: false });
+      return friendRequests;
+    } catch (error) {
+      console.error('🔴 FriendStore: getFriendRequests error:', error.message);
+      set({ error: error.message, loading: false });
+      return [];
+    }
+  },
+
+  // Set up a real-time listener for any changes to friend requests.
+  listenToFriendRequests: () => {
+    const currentUserId = get()._getCurrentUserId();
+    if (!currentUserId) return;
+
+    console.log('🟢 FriendStore: Setting up listener for friend requests.');
+    const channel = supabase
+      .channel('friend-requests-listener')
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'friend_requests',
-          filter: `requested_id=eq.${userId}`,
+          filter: `requested_id=eq.${currentUserId}`,
         },
         (payload) => {
-          console.log('🟢 SupabaseFriendStore: Friend request change:', payload);
-          // Refresh friend requests
-          get().loadFriendRequests(userId);
+          console.log('🟢 FriendStore: Change detected in friend requests:', payload);
+          get().getFriendRequests();
+          get().getFriends();
         }
       )
       .subscribe();
-
-    // Initial load
-    get().loadFriendRequests(userId);
-
+      
+    // Return the unsubscribe function for cleanup.
     return () => {
-      console.log('🟢 SupabaseFriendStore: Unsubscribing from friend requests');
-      supabase.removeChannel(subscription);
+      console.log('🟢 FriendStore: Unsubscribing from friend requests listener.');
+      supabase.removeChannel(channel);
     };
   },
-
-  // Get friend requests
-  getFriendRequests: async () => {
+  
+  removeFriend: async (friendId) => {
+    set({ loading: true, error: null });
     try {
-      // Get current user from Supabase auth
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      
-      if (authError || !user) {
-        console.error('🟢 SupabaseFriendStore: No authenticated user found:', authError);
-        set({ error: 'User not authenticated' });
-        return [];
+      const currentUserId = get()._getCurrentUserId();
+      if (!currentUserId) {
+        throw new Error('User not authenticated');
       }
 
-      console.log('🟢 SupabaseFriendStore: Getting friend requests for:', user.id);
-      
-      const { data, error } = await supabase
-        .from('friend_requests')
-        .select('*')
-        .eq('requested_id', user.id)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false });
+      console.log('🟢 FriendStore: Removing friend:', friendId);
+      const { error } = await supabase.rpc('remove_friend', {
+        user1_id: currentUserId,
+        user2_id: friendId,
+      });
 
-      if (error) {
-        console.error('🟢 SupabaseFriendStore: getFriendRequests error:', error);
-        set({ error: error.message });
-        return [];
-      }
+      if (error) throw error;
 
-      console.log('🟢 SupabaseFriendStore: Found friend requests:', data?.length || 0);
+      console.log('🟢 FriendStore: Friend removed successfully.');
+      // Refresh friends list
+      get().getFriends();
+      set({ loading: false });
 
-      const friendRequests = data || [];
-      set({ friendRequests });
-      return friendRequests;
-      
     } catch (error) {
-      console.error('🟢 SupabaseFriendStore: getFriendRequests error:', error);
-      set({ error: error.message });
-      return [];
+      console.error('🔴 FriendStore: removeFriend error:', error.message);
+      set({ error: 'Failed to remove friend.', loading: false });
+      throw error; // Re-throw to be caught in the component
     }
   },
 
-  // Load friend requests (helper function)
-  loadFriendRequests: async (userId) => {
-    try {
-      const { data, error } = await supabase
-        .from('friend_requests')
-        .select('*')
-        .eq('requested_id', userId)
-        .eq('status', 'pending');
-
-      if (error) {
-        console.error('🟢 SupabaseFriendStore: loadFriendRequests error:', error);
-        return;
-      }
-
-      const friendRequests = data?.map(request => ({
-        id: request.id,
-        userId: request.requester_id,
-        username: request.requester_username,
-        displayName: request.requester_display_name,
-        sentAt: request.created_at,
-      })) || [];
-
-      set({ friendRequests });
-      
-    } catch (error) {
-      console.error('🟢 SupabaseFriendStore: loadFriendRequests error:', error);
-    }
-  },
-
-  // Clear error
   clearError: () => set({ error: null })
-})); 
+}));

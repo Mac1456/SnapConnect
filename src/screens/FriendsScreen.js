@@ -26,6 +26,8 @@ export default function FriendsScreen({ navigation }) {
     getFriendRequests,
     acceptFriendRequest,
     rejectFriendRequest,
+    listenToFriendRequests,
+    removeFriend,
   } = useFriendStore();
   const { currentTheme } = useThemeStore();
   
@@ -33,18 +35,26 @@ export default function FriendsScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState('requests'); // 'requests' or 'friends'
 
   useEffect(() => {
-    if (user?.uid) {
-      loadData();
-    }
-  }, [user]);
+    // Initial data load when the component mounts
+    loadData();
+
+    // Set up real-time listener for friend requests
+    const unsubscribe = listenToFriendRequests();
+
+    // Clean up the listener when the component unmounts
+    return () => {
+      if (unsubscribe && typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, []); // Empty dependency array ensures this runs once on mount
 
   const loadData = async () => {
-    if (user?.uid) {
-      await Promise.all([
-        getFriends(user.uid),
-        getFriendRequests(user.uid)
-      ]);
-    }
+    // The store now handles the user ID automatically
+    await Promise.all([
+      getFriends(),
+      getFriendRequests()
+    ]);
   };
 
   const onRefresh = async () => {
@@ -53,17 +63,43 @@ export default function FriendsScreen({ navigation }) {
     setRefreshing(false);
   };
 
-  const handleAcceptRequest = async (requesterId) => {
+  const handleRemoveFriend = (friend) => {
+    Alert.alert(
+      'Remove Friend',
+      `Are you sure you want to remove ${friend.displayName || friend.username}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await removeFriend(friend.id);
+              Alert.alert('Success', `${friend.displayName || friend.username} has been removed.`);
+              // The store will auto-refresh, but this can feel more responsive
+              loadData(); 
+            } catch (error) {
+              Alert.alert('Error', 'Failed to remove friend.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleAcceptRequest = async (request) => {
     try {
-      await acceptFriendRequest(requesterId, user.uid);
-      await loadData(); // Refresh data
+      // The new function expects the entire request object
+      await acceptFriendRequest(request);
       Alert.alert('Success', 'Friend request accepted!');
+      // Data will refresh automatically via the listener, but a manual refresh can be faster
+      await loadData(); 
     } catch (error) {
       Alert.alert('Error', 'Failed to accept friend request');
     }
   };
 
-  const handleRejectRequest = async (requesterId) => {
+  const handleRejectRequest = async (requestId) => {
     Alert.alert(
       'Reject Friend Request',
       'Are you sure you want to reject this friend request?',
@@ -74,9 +110,11 @@ export default function FriendsScreen({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              await rejectFriendRequest(requesterId, user.uid);
-              await loadData(); // Refresh data
+              // The new function expects just the request ID
+              await rejectFriendRequest(requestId);
               Alert.alert('Success', 'Friend request rejected');
+              // Data will refresh automatically via the listener
+              await loadData();
             } catch (error) {
               Alert.alert('Error', 'Failed to reject friend request');
             }
@@ -94,9 +132,9 @@ export default function FriendsScreen({ navigation }) {
     >
       <View className="flex-row items-center">
         <View className="w-12 h-12 bg-gray-300 rounded-full items-center justify-center mr-3">
-          {request.requester_profile_picture ? (
+          {request.requester?.profile_picture ? (
             <Image 
-              source={{ uri: request.requester_profile_picture }} 
+              source={{ uri: request.requester.profile_picture }} 
               className="w-12 h-12 rounded-full"
             />
           ) : (
@@ -106,10 +144,10 @@ export default function FriendsScreen({ navigation }) {
         
         <View className="flex-1">
           <Text style={{ color: currentTheme.colors.text }} className="font-bold text-lg">
-            {request.requester_display_name || request.requester_username}
+            {request.requester?.display_name || request.requester?.username}
           </Text>
           <Text style={{ color: currentTheme.colors.textSecondary }} className="text-sm">
-            @{request.requester_username}
+            @{request.requester?.username}
           </Text>
           <Text style={{ color: currentTheme.colors.textSecondary }} className="text-xs mt-1">
             {new Date(request.created_at).toLocaleDateString()}
@@ -119,7 +157,7 @@ export default function FriendsScreen({ navigation }) {
       
       <View className="flex-row mt-4 space-x-3">
         <TouchableOpacity
-          onPress={() => handleAcceptRequest(request.requester_id)}
+          onPress={() => handleAcceptRequest(request)}
           style={{ backgroundColor: currentTheme.colors.primary }}
           className="flex-1 py-3 rounded-xl items-center"
           disabled={loading}
@@ -128,7 +166,7 @@ export default function FriendsScreen({ navigation }) {
         </TouchableOpacity>
         
         <TouchableOpacity
-          onPress={() => handleRejectRequest(request.requester_id)}
+          onPress={() => handleRejectRequest(request.id)}
           style={{ backgroundColor: currentTheme.colors.surface, borderColor: currentTheme.colors.textSecondary }}
           className="flex-1 py-3 rounded-xl items-center border"
           disabled={loading}
@@ -167,11 +205,22 @@ export default function FriendsScreen({ navigation }) {
         </View>
         
         <TouchableOpacity
-          onPress={() => navigation.navigate('Chat', { friendId: friend.id, friendName: friend.displayName || friend.username })}
+          onPress={() => navigation.navigate('Chat', { 
+            recipientId: friend.id, 
+            recipientName: friend.displayName || friend.username 
+          })}
           style={{ backgroundColor: currentTheme.colors.primary }}
-          className="px-4 py-2 rounded-xl"
+          className="px-3 py-2 rounded-xl"
         >
           <Ionicons name="chatbubble" size={20} color="white" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => handleRemoveFriend(friend)}
+          style={{ backgroundColor: currentTheme.colors.error, marginLeft: 10 }}
+          className="px-3 py-2 rounded-xl"
+        >
+          <Ionicons name="trash" size={20} color="white" />
         </TouchableOpacity>
       </View>
     </View>
