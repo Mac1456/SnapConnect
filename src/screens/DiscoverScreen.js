@@ -127,9 +127,9 @@ const DiscoverScreen = ({ navigation }) => {
   const handleSendFriendRequest = async (targetUser) => {
     try {
       setLoading(true);
-      console.log('🔍 DiscoverScreen: Sending friend request to:', targetUser.username);
+      console.log('🔍 DiscoverScreen: Sending friend request to user object:', JSON.stringify(targetUser, null, 2));
       
-      await sendFriendRequest(targetUser.id, targetUser.username);
+      await sendFriendRequest(targetUser);
       
       Alert.alert(
         'Success', 

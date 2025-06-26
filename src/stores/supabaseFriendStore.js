@@ -62,22 +62,34 @@ export const useSupabaseFriendStore = create((set, get) => ({
   },
 
   // Send a friend request to another user.
-  sendFriendRequest: async (targetUserId) => {
+  sendFriendRequest: async (targetUser) => {
     set({ loading: true, error: null });
+    const { user: currentUser } = useSupabaseAuthStore.getState();
+
     try {
-      const currentUserId = get()._getCurrentUserId();
-      if (!currentUserId) {
-        throw new Error('User not authenticated');
+      if (!currentUser) throw new Error('Current user not authenticated.');
+      if (!targetUser?.id || !targetUser?.username) {
+        throw new Error('Target user data is invalid.');
       }
 
-      console.log('🟢 FriendStore: Sending friend request to:', targetUserId);
-      const { error } = await supabase.from('friend_requests').insert({
-        requester_id: currentUserId,
-        requested_id: targetUserId,
-      });
+      console.log(`🟢 FriendStore: Attempting to send friend request from ${currentUser.id} to ${targetUser.id}`);
+
+      const requestPayload = {
+        requester_id: currentUser.id,
+        requested_id: targetUser.id,
+        requester_username: currentUser.user_metadata?.username || currentUser.email.split('@')[0],
+        requester_display_name: currentUser.user_metadata?.display_name || currentUser.user_metadata?.username || 'A new friend',
+      };
+
+      console.log('🟢 FriendStore: Sending payload:', JSON.stringify(requestPayload, null, 2));
+
+      const { data, error } = await supabase
+        .from('friend_requests')
+        .insert(requestPayload)
+        .select();
 
       if (error) {
-        // Handle cases where a request already exists.
+        console.error('🔴 FriendStore: Full error object from Supabase:', JSON.stringify(error, null, 2));
         if (error.code === '23505') {
           console.warn('🟡 FriendStore: Friend request already exists.');
           throw new Error('Friend request already sent.');
@@ -85,11 +97,17 @@ export const useSupabaseFriendStore = create((set, get) => ({
         throw error;
       }
 
-      console.log('🟢 FriendStore: Friend request sent successfully.');
+      console.log('🟢 FriendStore: Friend request sent successfully. Response:', data);
       set({ loading: false });
+      return data;
+
     } catch (error) {
       console.error('🔴 FriendStore: sendFriendRequest error:', error.message);
+      if (error.code) {
+        console.error('🔴 FriendStore: Raw error details:', JSON.stringify(error, null, 2));
+      }
       set({ error: error.message, loading: false });
+      throw error;
     }
   },
 

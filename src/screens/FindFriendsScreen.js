@@ -77,6 +77,12 @@ const FindFriendsScreen = ({ navigation }) => {
   };
 
   const handleSendFriendRequest = async (targetUser) => {
+    console.log('🔵 FindFriendsScreen: handleSendFriendRequest triggered for user:', JSON.stringify(targetUser, null, 2));
+    if (!targetUser?.id) {
+      Alert.alert('Error', 'Cannot send request to a user with no ID.');
+      console.error('🔴 FindFriendsScreen: targetUser object is missing an ID.', targetUser);
+      return;
+    }
     try {
       await sendFriendRequest(targetUser.id);
       Alert.alert('Success', `Friend request sent to ${targetUser.display_name || targetUser.username}!`);
