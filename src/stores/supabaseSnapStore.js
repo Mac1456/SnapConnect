@@ -186,7 +186,7 @@ export const useSupabaseSnapStore = create((set, get) => ({
       });
       
       console.log('🟢 SupabaseSnapStore: 📖 Story - FormData created for upload.');
-
+      
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('media')
         .upload(fileName, formData, {
@@ -211,12 +211,12 @@ export const useSupabaseSnapStore = create((set, get) => ({
 
       // Create story record
       const storyRecord = {
-        user_id: userId,
-        username: user.username || user.email?.split('@')[0] || 'Unknown',
-        display_name: user.display_name || user.username || user.email?.split('@')[0] || 'Unknown',
-        media_url: publicUrl,
-        media_type: mediaType,
-        caption: caption,
+          user_id: userId,
+          username: user.username || user.email?.split('@')[0] || 'Unknown',
+          display_name: user.display_name || user.username || user.email?.split('@')[0] || 'Unknown',
+          media_url: publicUrl,
+          media_type: mediaType,
+          caption: caption,
       };
       
       console.log('🟢 SupabaseSnapStore: 📖 Story - Creating story record:', JSON.stringify(storyRecord, null, 2));
@@ -285,15 +285,15 @@ export const useSupabaseSnapStore = create((set, get) => ({
         console.log('🟢 SupabaseSnapStore: 📖 Processing story:', story.id, 'from user:', story.user_id);
         
         const processedStory = {
-          id: story.id,
-          userId: story.user_id,
-          username: story.username || story.user?.username || 'Unknown',
-          displayName: story.display_name || story.user?.display_name || story.username || 'Unknown',
-          mediaUrl: story.media_url,
-          mediaType: story.media_type,
-          caption: story.caption,
-          createdAt: new Date(story.created_at),
-          views: story.views || [],
+        id: story.id,
+        userId: story.user_id,
+        username: story.username || story.user?.username || 'Unknown',
+        displayName: story.display_name || story.user?.display_name || story.username || 'Unknown',
+        mediaUrl: story.media_url,
+        mediaType: story.media_type,
+        caption: story.caption,
+        createdAt: new Date(story.created_at),
+        views: story.views || [],
         };
         
         console.log('🟢 SupabaseSnapStore: 📖 Processed story:', JSON.stringify(processedStory, null, 2));
@@ -549,16 +549,16 @@ export const useSupabaseSnapStore = create((set, get) => ({
       }
 
       console.log('🟢 SupabaseSnapStore: 📖 VIEWSTORY_UPDATE_SUCCESS');
-      
+
       // Update local state more safely
       const { stories } = get();
       if (stories && Array.isArray(stories)) {
-        const updatedStories = stories.map(story => 
-          story.id === storyId 
-            ? { ...story, views: updatedViews }
-            : story
-        );
-        set({ stories: updatedStories });
+      const updatedStories = stories.map(story => 
+        story.id === storyId 
+          ? { ...story, views: updatedViews }
+          : story
+      );
+      set({ stories: updatedStories });
         console.log('🟢 SupabaseSnapStore: 📖 VIEWSTORY_LOCAL_STATE_UPDATED');
       } else {
         console.log('🟡 SupabaseSnapStore: 📖 VIEWSTORY_WARNING: Local stories state was not an array.');

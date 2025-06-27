@@ -25,7 +25,7 @@ export const useSupabaseFriendStore = create((set, get) => ({
   friendRequests: [],
   loading: false,
   error: null,
-  
+
   // A helper function to get the current user's ID.
   _getCurrentUserId: () => {
     const { user } = useSupabaseAuthStore.getState();
@@ -40,7 +40,7 @@ export const useSupabaseFriendStore = create((set, get) => ({
       if (!currentUserId) {
         throw new Error('User not authenticated');
       }
-
+      
       console.log('🟢 FriendStore: Searching for users with query:', searchQuery);
       const { data, error } = await supabase
         .from('users')
@@ -63,7 +63,7 @@ export const useSupabaseFriendStore = create((set, get) => ({
 
   // Send a friend request to another user.
   sendFriendRequest: async (targetUser) => {
-    set({ loading: true, error: null });
+      set({ loading: true, error: null });
     const { user: currentUser } = useSupabaseAuthStore.getState();
 
     try {
@@ -100,7 +100,7 @@ export const useSupabaseFriendStore = create((set, get) => ({
       console.log('🟢 FriendStore: Friend request sent successfully. Response:', data);
       set({ loading: false });
       return data;
-
+      
     } catch (error) {
       console.error('🔴 FriendStore: sendFriendRequest error:', error.message);
       if (error.code) {
@@ -113,13 +113,13 @@ export const useSupabaseFriendStore = create((set, get) => ({
 
   // Accept a friend request using the new RPC function.
   acceptFriendRequest: async (request) => {
-    set({ loading: true, error: null });
+      set({ loading: true, error: null });
     try {
       const currentUserId = get()._getCurrentUserId();
       if (!currentUserId || !request) {
         throw new Error('User or request is invalid.');
       }
-      
+
       console.log('🟢 FriendStore: Accepting friend request ID:', request.id);
       const { error } = await supabase.rpc('accept_friend_request', {
         request_id: request.id,
@@ -134,7 +134,7 @@ export const useSupabaseFriendStore = create((set, get) => ({
       get().getFriends();
       get().getFriendRequests();
       set({ loading: false });
-
+      
     } catch (error) {
       console.error('🔴 FriendStore: acceptFriendRequest error:', error.message);
       set({ error: 'Failed to accept friend request.', loading: false });
@@ -143,7 +143,7 @@ export const useSupabaseFriendStore = create((set, get) => ({
 
   // Reject (or cancel) a friend request.
   rejectFriendRequest: async (requestId) => {
-    set({ loading: true, error: null });
+      set({ loading: true, error: null });
     try {
       console.log('🟢 FriendStore: Rejecting friend request ID:', requestId);
       const { error } = await supabase
@@ -159,7 +159,7 @@ export const useSupabaseFriendStore = create((set, get) => ({
         friendRequests: state.friendRequests.filter(req => req.id !== requestId),
         loading: false
       }));
-
+      
     } catch (error) {
       console.error('🔴 FriendStore: rejectFriendRequest error:', error.message);
       set({ error: 'Failed to reject friend request.', loading: false });
@@ -192,7 +192,7 @@ export const useSupabaseFriendStore = create((set, get) => ({
       console.error('🔴 FriendStore: getFriends error:', error.message);
       set({ error: error.message, loading: false });
       return [];
-    }
+      }
   },
 
   // Get all incoming friend requests for the current user.
@@ -247,14 +247,14 @@ export const useSupabaseFriendStore = create((set, get) => ({
         }
       )
       .subscribe();
-      
+
     // Return the unsubscribe function for cleanup.
     return () => {
       console.log('🟢 FriendStore: Unsubscribing from friend requests listener.');
       supabase.removeChannel(channel);
     };
   },
-  
+
   removeFriend: async (friendId) => {
     set({ loading: true, error: null });
     try {
@@ -275,7 +275,7 @@ export const useSupabaseFriendStore = create((set, get) => ({
       // Refresh friends list
       get().getFriends();
       set({ loading: false });
-
+      
     } catch (error) {
       console.error('🔴 FriendStore: removeFriend error:', error.message);
       set({ error: 'Failed to remove friend.', loading: false });
@@ -284,4 +284,4 @@ export const useSupabaseFriendStore = create((set, get) => ({
   },
 
   clearError: () => set({ error: null })
-}));
+})); 

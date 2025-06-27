@@ -36,7 +36,7 @@ export default function FriendsScreen({ navigation }) {
 
   useEffect(() => {
     // Initial data load when the component mounts
-    loadData();
+      loadData();
 
     // Set up real-time listener for friend requests
     const unsubscribe = listenToFriendRequests();
@@ -51,10 +51,10 @@ export default function FriendsScreen({ navigation }) {
 
   const loadData = async () => {
     // The store now handles the user ID automatically
-    await Promise.all([
+      await Promise.all([
       getFriends(),
       getFriendRequests()
-    ]);
+      ]);
   };
 
   const onRefresh = async () => {
@@ -73,7 +73,7 @@ export default function FriendsScreen({ navigation }) {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            try {
+    try {
               await removeFriend(friend.id);
               Alert.alert('Success', `${friend.displayName || friend.username} has been removed.`);
               // The store will auto-refresh, but this can feel more responsive

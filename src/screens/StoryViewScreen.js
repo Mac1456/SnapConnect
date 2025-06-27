@@ -89,10 +89,10 @@ export default function StoryViewScreen({ navigation, route }) {
         console.log('📖 StoryViewScreen: 🔄 This is an image, setting 5s timer');
         const timer = setTimeout(advanceStory, 5000);
         setViewTimer(timer);
-      } else {
+        } else {
         console.log('📖 StoryViewScreen: 🔄 This is a video, will advance on completion');
-      }
-
+        }
+      
       return () => {
         console.log('📖 StoryViewScreen: 🔄 Cleaning up timers');
         if (viewTimer) clearTimeout(viewTimer);
@@ -225,7 +225,7 @@ export default function StoryViewScreen({ navigation, route }) {
       return (
         <View style={{ 
           width, 
-          height: height * 0.8,
+          height: height * 0.8, 
           backgroundColor: 'black',
           alignItems: 'center',
           justifyContent: 'center'
@@ -241,7 +241,7 @@ export default function StoryViewScreen({ navigation, route }) {
       return (
         <View style={{ 
           width, 
-          height: height * 0.8,
+          height: height * 0.8, 
           backgroundColor: 'black',
           alignItems: 'center',
           justifyContent: 'center'

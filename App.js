@@ -13,6 +13,8 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import FriendsScreen from './src/screens/FriendsScreen';
 import FindFriendsScreen from './src/screens/FindFriendsScreen';
 import DiscoverScreen from './src/screens/DiscoverScreen';
+import GroupChatScreen from './src/screens/GroupChatScreen';
+import CreateGroupChatScreen from './src/screens/CreateGroupChatScreen';
 import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -126,6 +128,22 @@ export default function App() {
                 component={DiscoverScreen}
                 options={{ 
                   presentation: 'card',
+                  gestureEnabled: true
+                }}
+              />
+              <Stack.Screen 
+                name="GroupChat" 
+                component={GroupChatScreen}
+                options={{ 
+                  presentation: 'card',
+                  gestureEnabled: true
+                }}
+              />
+              <Stack.Screen 
+                name="CreateGroupChat" 
+                component={CreateGroupChatScreen}
+                options={{ 
+                  presentation: 'modal',
                   gestureEnabled: true
                 }}
               />

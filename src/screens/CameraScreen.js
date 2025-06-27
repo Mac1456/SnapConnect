@@ -13,6 +13,8 @@ import {
   Modal,
   FlatList,
   Image,
+  TextInput,
+  ScrollView,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +24,7 @@ import { useSupabaseSnapStore as useSnapStore } from '../stores/supabaseSnapStor
 import { useSupabaseFriendStore as useFriendStore } from '../stores/supabaseFriendStore';
 import { useSupabaseAuthStore as useAuthStore } from '../stores/supabaseAuthStore';
 import { useThemeStore } from '../stores/themeStore';
+import { useAIStore } from '../stores/aiStore';
 
 const { width, height } = Dimensions.get('window');
 
@@ -31,6 +34,7 @@ export default function CameraScreen({ navigation, route }) {
   const { friends, getFriends } = useFriendStore();
   const { user } = useAuthStore();
   const { currentTheme } = useThemeStore();
+  const { generateCaptions, generatedCaptions, loading: aiLoading } = useAIStore();
   
   // Get recipient info from route params if coming from chat
   const recipientInfo = route?.params || {};
@@ -48,15 +52,34 @@ export default function CameraScreen({ navigation, route }) {
   const [showFriendsList, setShowFriendsList] = useState(false);
   const [capturedMedia, setCapturedMedia] = useState(null);
   const [mediaType, setMediaType] = useState(null);
+  
+  // AI Caption states
+  const [showCaptionModal, setShowCaptionModal] = useState(false);
+  const [selectedCaption, setSelectedCaption] = useState('');
+  const [customCaption, setCustomCaption] = useState('');
+  const [captionMood, setCaptionMood] = useState('fun');
+  const [pendingMediaUri, setPendingMediaUri] = useState(null);
+  const [pendingMediaType, setPendingMediaType] = useState(null);
+  const [pendingActionType, setPendingActionType] = useState(null);
 
   useEffect(() => {
+    // When the camera screen loads, get all necessary permissions and data.
     getMediaLibraryPermissions();
-    
-    // Load friends if user has any
-    if (user && user.friends && user.friends.length > 0) {
-      getFriends(user.friends);
+    if (user) {
+      console.log('🎥 CameraScreen: User found, fetching friends...');
+      getFriends();
     }
   }, [user]);
+
+  useEffect(() => {
+    // This effect will re-run whenever the user selects a new mood.
+    // It ensures that we fetch new AI suggestions tailored to that mood.
+    if (showCaptionModal && pendingMediaUri) {
+      console.log(`🤖 CameraScreen: Mood changed to '${captionMood}'. Regenerating captions...`);
+      const friendIds = friends.map(f => f.id);
+      generateCaptions(pendingMediaType, '', captionMood, friendIds);
+    }
+  }, [captionMood, showCaptionModal]);
 
   useEffect(() => {
     // Cleanup timer on unmount
@@ -335,24 +358,56 @@ export default function CameraScreen({ navigation, route }) {
     try {
       console.log(`🎥 CameraScreen: Handling captured ${mediaType} for ${type}`);
       
-      if (type === 'story') {
-        await sendStory(uri, mediaType, '');
-        Alert.alert(
-          'Story Posted!',
-          `Your ${mediaType === 'video' ? 'video' : 'photo'} story has been posted successfully!`,
-          [{ text: 'OK' }]
-        );
-      } else if (type === 'snap') {
-        // Show friend selection for snap
-        showFriendSelection(uri, mediaType);
-      }
+      // Store pending media info for AI caption generation
+      setPendingMediaUri(uri);
+      setPendingMediaType(mediaType);
+      setPendingActionType(type);
+      
+      // Generate AI captions
+      console.log('🤖 CameraScreen: Generating AI captions...');
+      const friendIds = friends.map(f => f.id);
+      await generateCaptions(mediaType, '', captionMood, friendIds);
+      
+      // Show caption selection modal
+      setShowCaptionModal(true);
+      
     } catch (error) {
       console.error('🎥 CameraScreen: Error handling media:', error);
       Alert.alert('Error', 'Failed to process media. Please try again.');
     }
   };
 
-  const showFriendSelection = (uri, mediaType) => {
+  const handleCaptionSelected = async () => {
+    try {
+      const finalCaption = selectedCaption || customCaption || '';
+      
+      if (pendingActionType === 'story') {
+        await sendStory(pendingMediaUri, pendingMediaType, finalCaption);
+        Alert.alert(
+          'Story Posted!',
+          `Your ${pendingMediaType === 'video' ? 'video' : 'photo'} story has been posted successfully!`,
+          [{ text: 'OK' }]
+        );
+      } else if (pendingActionType === 'snap') {
+        // Show friend selection for snap
+        showFriendSelection(pendingMediaUri, pendingMediaType, finalCaption);
+      }
+      
+      // Reset states
+      setShowCaptionModal(false);
+      setSelectedCaption('');
+      setCustomCaption('');
+      setPendingMediaUri(null);
+      setPendingMediaType(null);
+      setPendingActionType(null);
+      
+    } catch (error) {
+      console.error('🎥 CameraScreen: Error with caption selection:', error);
+      Alert.alert('Error', 'Failed to process media with caption. Please try again.');
+    }
+  };
+
+  const showFriendSelection = (uri, mediaType, caption = '') => {
     // For now, show a simple alert with friend options
     // In a full app, this would be a modal with friend list
     if (friends.length === 0) {
@@ -367,7 +422,7 @@ export default function CameraScreen({ navigation, route }) {
     // Create buttons for each friend
     const friendButtons = friends.slice(0, 5).map(friend => ({
       text: friend.displayName || friend.username,
-      onPress: () => sendSnapToFriend(uri, mediaType, friend.id)
+      onPress: () => sendSnapToFriend(uri, mediaType, friend.id, caption)
     }));
 
     // Add cancel button
@@ -380,9 +435,9 @@ export default function CameraScreen({ navigation, route }) {
     );
   };
 
-  const sendSnapToFriend = async (uri, mediaType, friendId) => {
+  const sendSnapToFriend = async (uri, mediaType, friendId, caption = '') => {
     try {
-      await sendSnap(friendId, uri, mediaType, '', 3);
+      await sendSnap(friendId, uri, mediaType, caption, 3);
       Alert.alert(
         'Snap Sent!',
         `Your ${mediaType === 'video' ? 'video' : 'photo'} snap has been sent successfully!`,
@@ -759,6 +814,239 @@ export default function CameraScreen({ navigation, route }) {
                 </View>
               }
             />
+          </View>
+        </View>
+      </Modal>
+
+      {/* AI Caption Selection Modal */}
+      <Modal
+        visible={showCaptionModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCaptionModal(false)}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          justifyContent: 'flex-end',
+        }}>
+          <View style={{
+            backgroundColor: currentTheme.colors.modalBackground,
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+            padding: 20,
+            maxHeight: '80%',
+            borderWidth: 3,
+            borderColor: currentTheme.colors.snapYellow,
+          }}>
+            {/* Header */}
+            <View style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 20,
+              paddingBottom: 16,
+              borderBottomWidth: 2,
+              borderBottomColor: currentTheme.colors.borderStrong,
+            }}>
+              <Text style={{
+                fontSize: 20,
+                fontWeight: 'bold',
+                color: currentTheme.colors.text,
+              }}>
+                🤖 AI Caption Suggestions
+              </Text>
+              <TouchableOpacity 
+                onPress={() => setShowCaptionModal(false)}
+                style={{
+                  padding: 8,
+                  borderRadius: 20,
+                  backgroundColor: currentTheme.colors.error + '20',
+                  borderWidth: 1,
+                  borderColor: currentTheme.colors.error,
+                }}
+              >
+                <Ionicons name="close" size={24} color={currentTheme.colors.error} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Mood Selection */}
+              <Text style={{
+                fontSize: 16,
+                fontWeight: 'bold',
+                color: currentTheme.colors.text,
+                marginBottom: 12,
+              }}>
+                Choose Mood:
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
+                {['fun', 'casual', 'exciting', 'nostalgic', 'celebration'].map((mood) => (
+                  <TouchableOpacity
+                    key={mood}
+                    onPress={() => setCaptionMood(mood)}
+                    style={{
+                      paddingHorizontal: 16,
+                      paddingVertical: 8,
+                      marginRight: 10,
+                      borderRadius: 20,
+                      backgroundColor: captionMood === mood ? currentTheme.colors.snapYellow : currentTheme.colors.surface,
+                      borderWidth: 2,
+                      borderColor: captionMood === mood ? currentTheme.colors.snapPink : currentTheme.colors.border,
+                    }}
+                  >
+                    <Text style={{
+                      color: captionMood === mood ? 'black' : currentTheme.colors.text,
+                      fontWeight: captionMood === mood ? 'bold' : 'normal',
+                      textTransform: 'capitalize',
+                    }}>
+                      {mood}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              {/* AI Generated Captions */}
+              {aiLoading ? (
+                <View style={{ alignItems: 'center', paddingVertical: 20 }}>
+                  <ActivityIndicator size="large" color={currentTheme.colors.snapYellow} />
+                  <Text style={{ color: currentTheme.colors.text, marginTop: 10 }}>
+                    Generating captions...
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  <Text style={{
+                    fontSize: 16,
+                    fontWeight: 'bold',
+                    color: currentTheme.colors.text,
+                    marginBottom: 12,
+                  }}>
+                    AI Suggestions:
+                  </Text>
+                  {generatedCaptions.map((caption, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      onPress={() => setSelectedCaption(caption)}
+                      style={{
+                        padding: 16,
+                        marginBottom: 10,
+                        borderRadius: 15,
+                        backgroundColor: selectedCaption === caption ? 
+                          currentTheme.colors.snapYellow + '40' : currentTheme.colors.surface,
+                        borderWidth: 2,
+                        borderColor: selectedCaption === caption ? 
+                          currentTheme.colors.snapYellow : currentTheme.colors.border,
+                      }}
+                    >
+                      <Text style={{
+                        color: currentTheme.colors.text,
+                        fontSize: 16,
+                        fontWeight: selectedCaption === caption ? 'bold' : 'normal',
+                      }}>
+                        {caption}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </>
+              )}
+
+              {/* Custom Caption Input */}
+              <Text style={{
+                fontSize: 16,
+                fontWeight: 'bold',
+                color: currentTheme.colors.text,
+                marginTop: 20,
+                marginBottom: 12,
+              }}>
+                Or write your own:
+              </Text>
+              <TextInput
+                value={customCaption}
+                onChangeText={setCustomCaption}
+                placeholder="Type your caption here..."
+                placeholderTextColor={currentTheme.colors.textSecondary}
+                style={{
+                  backgroundColor: currentTheme.colors.surface,
+                  borderWidth: 2,
+                  borderColor: currentTheme.colors.border,
+                  borderRadius: 15,
+                  padding: 16,
+                  color: currentTheme.colors.text,
+                  fontSize: 16,
+                  minHeight: 60,
+                  textAlignVertical: 'top',
+                }}
+                multiline
+                maxLength={150}
+              />
+              <Text style={{
+                color: currentTheme.colors.textSecondary,
+                fontSize: 12,
+                marginTop: 5,
+                textAlign: 'right',
+              }}>
+                {customCaption.length}/150
+              </Text>
+
+              {/* Action Buttons */}
+              <View style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                marginTop: 30,
+                gap: 15,
+              }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setSelectedCaption('');
+                    setCustomCaption('');
+                    handleCaptionSelected();
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: 16,
+                    borderRadius: 15,
+                    backgroundColor: currentTheme.colors.surface,
+                    borderWidth: 2,
+                    borderColor: currentTheme.colors.border,
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text style={{
+                    color: currentTheme.colors.text,
+                    fontSize: 16,
+                    fontWeight: 'bold',
+                  }}>
+                    No Caption
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  onPress={handleCaptionSelected}
+                  disabled={!selectedCaption && !customCaption.trim()}
+                  style={{
+                    flex: 1,
+                    padding: 16,
+                    borderRadius: 15,
+                    backgroundColor: (selectedCaption || customCaption.trim()) ? 
+                      currentTheme.colors.snapYellow : currentTheme.colors.surface,
+                    borderWidth: 2,
+                    borderColor: (selectedCaption || customCaption.trim()) ? 
+                      currentTheme.colors.snapPink : currentTheme.colors.border,
+                    alignItems: 'center',
+                    opacity: (selectedCaption || customCaption.trim()) ? 1 : 0.5,
+                  }}
+                >
+                  <Text style={{
+                    color: (selectedCaption || customCaption.trim()) ? 'black' : currentTheme.colors.textSecondary,
+                    fontSize: 16,
+                    fontWeight: 'bold',
+                  }}>
+                    Use Caption
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>

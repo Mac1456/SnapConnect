@@ -10,15 +10,19 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSupabaseAuthStore as useAuthStore } from '../stores/supabaseAuthStore';
 import { useSupabaseFriendStore as useFriendStore } from '../stores/supabaseFriendStore';
+import { useGroupChatStore } from '../stores/groupChatStore';
 import { useThemeStore } from '../stores/themeStore';
 import { supabase } from '../../supabase.config';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function ChatsScreen({ navigation }) {
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('direct'); // 'direct' or 'groups'
   
   const { user } = useAuthStore();
   const { friends, getFriends } = useFriendStore();
+  const { groupChats, getGroupChats } = useGroupChatStore();
   const { theme } = useThemeStore();
 
   const currentTheme = theme === 'dark' ? {
@@ -45,8 +49,20 @@ export default function ChatsScreen({ navigation }) {
     if (user && user.uid) {
       loadConversations();
       getFriends(user.uid);
+      getGroupChats();
     }
   }, [user]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (user && user.uid) {
+        console.log('💬 ChatsScreen: Screen focused, loading data...');
+        loadConversations();
+        getFriends(user.uid);
+        getGroupChats();
+      }
+    }, [user])
+  );
 
   const loadConversations = async () => {
     try {
@@ -115,6 +131,96 @@ export default function ChatsScreen({ navigation }) {
     
     return messageTime.toLocaleDateString();
   };
+
+  const renderHeader = () => (
+    <View style={{
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 15,
+      backgroundColor: currentTheme.colors.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: currentTheme.colors.border,
+    }}>
+      <Text style={{
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: currentTheme.colors.text,
+      }}>
+        Chats
+      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15 }}>
+        <TouchableOpacity onPress={() => navigation.navigate('Friends')}>
+          <Ionicons name="people-outline" size={26} color={currentTheme.colors.text} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.navigate('FindFriends')}>
+          <Ionicons name="person-add-outline" size={26} color={currentTheme.colors.text} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.navigate('CreateGroupChat')}>
+          <Ionicons name="add-circle-outline" size={30} color={currentTheme.colors.text} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderGroupChat = ({ item }) => (
+    <TouchableOpacity
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 15,
+        backgroundColor: currentTheme.colors.surface,
+        marginHorizontal: 15,
+        marginVertical: 5,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: currentTheme.colors.border,
+      }}
+      onPress={() => navigation.navigate('GroupChat', {
+        group: item
+      })}
+    >
+      <View style={{
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        backgroundColor: currentTheme.colors.primary,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+      }}>
+        <Ionicons name="people" size={24} color={currentTheme.colors.background} />
+      </View>
+      
+      <View style={{ flex: 1 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={{
+            fontSize: 16,
+            fontWeight: 'bold',
+            color: currentTheme.colors.text,
+          }}>
+            {item.name}
+          </Text>
+          <Text style={{
+            fontSize: 12,
+            color: currentTheme.colors.textSecondary,
+          }}>
+            {formatTime(item.updated_at)}
+          </Text>
+        </View>
+        
+        <Text style={{
+          fontSize: 14,
+          color: currentTheme.colors.textSecondary,
+          marginTop: 2,
+        }} numberOfLines={1}>
+          {item.member_ids?.length || 0} members - {item.description}
+        </Text>
+      </View>
+
+      <Ionicons name="chevron-forward" size={20} color={currentTheme.colors.textSecondary} />
+    </TouchableOpacity>
+  );
 
   const renderConversation = ({ item }) => (
     <TouchableOpacity
@@ -213,34 +319,55 @@ export default function ChatsScreen({ navigation }) {
       flex: 1, 
       backgroundColor: currentTheme.colors.background 
     }}>
-      {/* Header */}
+      {renderHeader()}
+
+      {/* Tab Navigation */}
       <View style={{
         flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 15,
+        backgroundColor: currentTheme.colors.surface,
         borderBottomWidth: 1,
         borderBottomColor: currentTheme.colors.border,
-        backgroundColor: currentTheme.colors.surface,
       }}>
-        <Text style={{
-          fontSize: 24,
-          fontWeight: 'bold',
-          color: currentTheme.colors.text,
-        }}>
-          💬 Chats
-        </Text>
-        <View style={{ flexDirection: 'row', gap: 15 }}>
-          <TouchableOpacity onPress={() => navigation.navigate('Friends')}>
-            <Ionicons name="people" size={24} color={currentTheme.colors.text} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('Discover')}>
-            <Ionicons name="person-add" size={24} color={currentTheme.colors.text} />
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          onPress={() => setActiveTab('direct')}
+          style={{
+            flex: 1,
+            paddingVertical: 15,
+            alignItems: 'center',
+            borderBottomWidth: 2,
+            borderBottomColor: activeTab === 'direct' ? currentTheme.colors.primary : 'transparent',
+          }}
+        >
+          <Text style={{
+            fontSize: 16,
+            fontWeight: activeTab === 'direct' ? 'bold' : 'normal',
+            color: activeTab === 'direct' ? currentTheme.colors.primary : currentTheme.colors.textSecondary,
+          }}>
+            Direct Messages ({conversations.length})
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          onPress={() => setActiveTab('groups')}
+          style={{
+            flex: 1,
+            paddingVertical: 15,
+            alignItems: 'center',
+            borderBottomWidth: 2,
+            borderBottomColor: activeTab === 'groups' ? currentTheme.colors.primary : 'transparent',
+          }}
+        >
+          <Text style={{
+            fontSize: 16,
+            fontWeight: activeTab === 'groups' ? 'bold' : 'normal',
+            color: activeTab === 'groups' ? currentTheme.colors.primary : currentTheme.colors.textSecondary,
+          }}>
+            Group Chats ({groupChats.length})
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Conversations List */}
+      {/* Content Area */}
       {loading ? (
         <View style={{
           flex: 1,
@@ -251,64 +378,124 @@ export default function ChatsScreen({ navigation }) {
             fontSize: 16,
             color: currentTheme.colors.textSecondary,
           }}>
-            Loading conversations...
+            Loading {activeTab === 'direct' ? 'conversations' : 'group chats'}...
           </Text>
         </View>
-      ) : conversations.length > 0 ? (
-        <FlatList
-          data={conversations}
-          renderItem={renderConversation}
-          keyExtractor={(item) => item.partnerId}
-          style={{ flex: 1 }}
-          contentContainerStyle={{ paddingVertical: 10 }}
-          showsVerticalScrollIndicator={false}
-          onRefresh={loadConversations}
-          refreshing={loading}
-        />
-      ) : (
-        <View style={{
-          flex: 1,
-          justifyContent: 'center',
-          alignItems: 'center',
-          paddingHorizontal: 40,
-        }}>
-          <Ionicons name="chatbubbles" size={64} color={currentTheme.colors.textSecondary} />
-          <Text style={{
-            fontSize: 18,
-            fontWeight: 'bold',
-            color: currentTheme.colors.text,
-            marginTop: 20,
-            textAlign: 'center',
+      ) : activeTab === 'direct' ? (
+        conversations.length > 0 ? (
+          <FlatList
+            data={conversations}
+            renderItem={renderConversation}
+            keyExtractor={(item) => item.partnerId}
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingVertical: 10 }}
+            showsVerticalScrollIndicator={false}
+            onRefresh={loadConversations}
+            refreshing={loading}
+          />
+        ) : (
+          <View style={{
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingHorizontal: 40,
           }}>
-            No conversations yet
-          </Text>
-          <Text style={{
-            fontSize: 16,
-            color: currentTheme.colors.textSecondary,
-            marginTop: 10,
-            textAlign: 'center',
-          }}>
-            Start chatting with your friends by finding them in the Discover section
-          </Text>
-          <TouchableOpacity
-            style={{
-              backgroundColor: currentTheme.colors.primary,
-              paddingHorizontal: 20,
-              paddingVertical: 12,
-              borderRadius: 25,
-              marginTop: 20,
-            }}
-            onPress={() => navigation.navigate('Discover')}
-          >
+            <Ionicons name="chatbubbles" size={64} color={currentTheme.colors.textSecondary} />
             <Text style={{
-              color: currentTheme.colors.background,
-              fontSize: 16,
+              fontSize: 18,
               fontWeight: 'bold',
+              color: currentTheme.colors.text,
+              marginTop: 20,
+              textAlign: 'center',
             }}>
-              Find Friends
+              No conversations yet
             </Text>
-          </TouchableOpacity>
-        </View>
+            <Text style={{
+              fontSize: 16,
+              color: currentTheme.colors.textSecondary,
+              marginTop: 10,
+              textAlign: 'center',
+            }}>
+              Start chatting with your friends by finding them in the Discover section
+            </Text>
+            <TouchableOpacity
+              style={{
+                backgroundColor: currentTheme.colors.primary,
+                paddingHorizontal: 20,
+                paddingVertical: 12,
+                borderRadius: 25,
+                marginTop: 20,
+              }}
+              onPress={() => navigation.navigate('Discover')}
+            >
+              <Text style={{
+                color: currentTheme.colors.background,
+                fontSize: 16,
+                fontWeight: 'bold',
+              }}>
+                Find Friends
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )
+      ) : (
+        // Group Chats Tab
+        groupChats.length > 0 ? (
+          <FlatList
+            data={groupChats}
+            renderItem={renderGroupChat}
+            keyExtractor={(item) => item.id}
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingVertical: 10 }}
+            showsVerticalScrollIndicator={false}
+            onRefresh={getGroupChats}
+            refreshing={loading}
+          />
+        ) : (
+          <View style={{
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingHorizontal: 40,
+          }}>
+            <Ionicons name="people" size={64} color={currentTheme.colors.textSecondary} />
+            <Text style={{
+              fontSize: 18,
+              fontWeight: 'bold',
+              color: currentTheme.colors.text,
+              marginTop: 20,
+              textAlign: 'center',
+            }}>
+              No group chats yet
+            </Text>
+            <Text style={{
+              fontSize: 16,
+              color: currentTheme.colors.textSecondary,
+              marginTop: 10,
+              textAlign: 'center',
+            }}>
+              Create a group chat to start conversations with multiple friends
+            </Text>
+            <TouchableOpacity
+              style={{
+                backgroundColor: currentTheme.colors.primary,
+                paddingHorizontal: 20,
+                paddingVertical: 12,
+                borderRadius: 25,
+                marginTop: 20,
+              }}
+              onPress={() => navigation.navigate('GroupChat', { isNewGroup: true })}
+            >
+              <Text style={{
+                color: currentTheme.colors.background,
+                fontSize: 16,
+                fontWeight: 'bold',
+              }}>
+                Create Group Chat
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )
       )}
     </SafeAreaView>
   );

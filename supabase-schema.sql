@@ -270,6 +270,8 @@ ALTER PUBLICATION supabase_realtime ADD TABLE friend_requests;
 ALTER PUBLICATION supabase_realtime ADD TABLE snaps;
 ALTER PUBLICATION supabase_realtime ADD TABLE stories;
 ALTER PUBLICATION supabase_realtime ADD TABLE friendships;
+ALTER PUBLICATION supabase_realtime ADD TABLE group_chats;
+ALTER PUBLICATION supabase_realtime ADD TABLE messages;
 
 -- ========================================
 -- SAMPLE DATA (OPTIONAL)
@@ -280,6 +282,38 @@ ALTER PUBLICATION supabase_realtime ADD TABLE friendships;
 --   ('550e8400-e29b-41d4-a716-446655440001', 'john_doe', 'John Doe', 'john@example.com', 'Love taking photos!'),
 --   ('550e8400-e29b-41d4-a716-446655440002', 'jane_smith', 'Jane Smith', 'jane@example.com', 'Snapchat enthusiast'),
 --   ('550e8400-e29b-41d4-a716-446655440003', 'mike_wilson', 'Mike Wilson', 'mike@example.com', 'Always sharing stories');
+
+-- ========================================
+-- GROUP CHATS TABLE
+-- ========================================
+CREATE TABLE IF NOT EXISTS group_chats (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name VARCHAR(100) NOT NULL,
+  description TEXT DEFAULT '',
+  creator_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  member_ids UUID[] DEFAULT '{}',
+  admin_ids UUID[] DEFAULT '{}',
+  group_photo TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable RLS for group_chats
+ALTER TABLE group_chats ENABLE ROW LEVEL SECURITY;
+
+-- Group Chats policies
+CREATE POLICY "Users can view groups they're members of" ON group_chats
+  FOR SELECT USING (auth.uid() = ANY(member_ids) OR auth.uid() = creator_id);
+CREATE POLICY "Users can create group chats" ON group_chats
+  FOR INSERT WITH CHECK (auth.uid() = creator_id);
+CREATE POLICY "Group admins can update groups" ON group_chats
+  FOR UPDATE USING (auth.uid() = ANY(admin_ids) OR auth.uid() = creator_id);
+CREATE POLICY "Group admins can delete groups" ON group_chats
+  FOR DELETE USING (auth.uid() = creator_id);
+
+-- Create indexes for group chats
+CREATE INDEX IF NOT EXISTS idx_group_chats_creator ON group_chats(creator_id);
+CREATE INDEX IF NOT EXISTS idx_group_chats_members ON group_chats USING GIN(member_ids);
 
 -- ========================================
 -- MESSAGES TABLE SETUP
@@ -293,10 +327,15 @@ CREATE TABLE IF NOT EXISTS messages (
   content TEXT NOT NULL,
   message_type TEXT DEFAULT 'text' CHECK (message_type IN ('text', 'image', 'video', 'system')),
   media_url TEXT,
+  group_chat_id UUID REFERENCES group_chats(id) ON DELETE CASCADE, -- For group messages
   group_members UUID[], -- Array of user IDs for group messages
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   read_at TIMESTAMP WITH TIME ZONE,
-  deleted_at TIMESTAMP WITH TIME ZONE -- For disappearing messages
+  deleted_at TIMESTAMP WITH TIME ZONE, -- For disappearing messages
+  CONSTRAINT check_message_target CHECK (
+    (recipient_id IS NOT NULL AND group_chat_id IS NULL) OR  -- Direct message
+    (recipient_id IS NULL AND group_chat_id IS NOT NULL)     -- Group message
+  )
 );
 
 -- Create indexes for better performance
@@ -304,6 +343,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_sender_recipient ON messages(sender_id, 
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_deleted_at ON messages(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_messages_group_members ON messages USING GIN(group_members);
+CREATE INDEX IF NOT EXISTS idx_messages_group_chat ON messages(group_chat_id);
 
 -- Enable RLS on messages table
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;

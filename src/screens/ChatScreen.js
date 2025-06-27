@@ -10,6 +10,7 @@ import {
   Platform,
   Alert,
   Image,
+  StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSupabaseAuthStore as useAuthStore } from '../stores/supabaseAuthStore';
@@ -272,56 +273,79 @@ export default function ChatScreen({ navigation, route }) {
     ]);
   };
 
-  const renderMessage = ({ item }) => (
-    <View style={{
-      flexDirection: item.isCurrentUser ? 'row-reverse' : 'row',
-      marginVertical: 4,
-      marginHorizontal: 16,
-      alignItems: 'flex-end',
-    }}>
-      <View style={{
-        backgroundColor: item.isCurrentUser 
-          ? currentTheme.colors.chatBubbleSent 
-          : currentTheme.colors.chatBubbleReceived,
-        borderRadius: 18,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        maxWidth: '75%',
-        marginHorizontal: 8,
-        borderWidth: 2,
-        borderColor: item.isCurrentUser 
-          ? currentTheme.colors.snapPink 
-          : currentTheme.colors.borderStrong,
-        shadowColor: currentTheme.colors.shadow,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
-        elevation: 4,
-      }}>
-        <Text style={{
-          color: item.isCurrentUser 
-            ? currentTheme.colors.chatBubbleTextSent 
-            : currentTheme.colors.chatBubbleTextReceived,
-          fontSize: 16,
-          fontWeight: '500',
+  const renderMessage = ({ item }) => {
+    if (!item) return null;
+
+    const isSender = item.senderId === currentUserId;
+    const messageDate = new Date(item.timestamp);
+
+    // Handle 'snap' type messages
+    if (item.message_type === 'snap') {
+      const snapText = isSender ? 'You sent a snap' : 'You received a snap';
+      const snapIcon = isSender ? 'arrow-up-circle' : 'arrow-down-circle';
+      const isOpened = item.opened; // Assuming your message has an 'opened' field
+
+      return (
+        <View style={[
+          styles.messageContainer,
+          isSender ? styles.senderContainer : styles.recipientContainer,
+          isOpened ? { opacity: 0.6 } : {}
+        ]}>
+          <Ionicons name={snapIcon} size={20} color={isSender ? currentTheme.colors.text : currentTheme.colors.text} style={{ marginRight: 8 }} />
+          <Text style={[styles.messageText, { color: isSender ? currentTheme.colors.text : currentTheme.colors.text }]}>
+            {snapText} {isOpened ? '· Opened' : '· Tap to view'}
+          </Text>
+        </View>
+      );
+    }
+
+    // Handle regular text messages
+    return (
+      <View style={[styles.messageContainer, isSender ? styles.senderContainer : styles.recipientContainer]}>
+        <View style={{
+          backgroundColor: isSender 
+            ? currentTheme.colors.chatBubbleSent 
+            : currentTheme.colors.chatBubbleReceived,
+          borderRadius: 18,
+          paddingHorizontal: 16,
+          paddingVertical: 10,
+          maxWidth: '75%',
+          marginHorizontal: 8,
+          borderWidth: 2,
+          borderColor: isSender 
+            ? currentTheme.colors.snapPink 
+            : currentTheme.colors.borderStrong,
+          shadowColor: currentTheme.colors.shadow,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.3,
+          shadowRadius: 4,
+          elevation: 4,
         }}>
-          {item.text}
-        </Text>
-        <Text style={{
-          color: item.isCurrentUser 
-            ? currentTheme.colors.chatBubbleTextSent + '80'
-            : currentTheme.colors.chatBubbleTextReceived + '80',
-          fontSize: 12,
-          marginTop: 4,
-          textAlign: item.isCurrentUser ? 'right' : 'left',
-        }}>
-          {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          {item.isOptimistic && ' ⏳'}
-          {item.isDisappearing && ' 🕒'}
-        </Text>
+          <Text style={{
+            color: isSender 
+              ? currentTheme.colors.chatBubbleTextSent 
+              : currentTheme.colors.chatBubbleTextReceived,
+            fontSize: 16,
+            fontWeight: '500',
+          }}>
+            {item.text}
+          </Text>
+          <Text style={{
+            color: isSender 
+              ? currentTheme.colors.chatBubbleTextSent + '80'
+              : currentTheme.colors.chatBubbleTextReceived + '80',
+            fontSize: 12,
+            marginTop: 4,
+            textAlign: isSender ? 'right' : 'left',
+          }}>
+            {messageDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            {item.isOptimistic && ' ⏳'}
+            {item.isDisappearing && ' 🕒'}
+          </Text>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={{ 
@@ -645,4 +669,28 @@ export default function ChatScreen({ navigation, route }) {
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
-} 
+}
+
+const styles = StyleSheet.create({
+  messageContainer: {
+    flexDirection: 'row',
+    marginVertical: 5,
+    maxWidth: '80%',
+  },
+  senderContainer: {
+    alignSelf: 'flex-end',
+    flexDirection: 'row-reverse',
+  },
+  recipientContainer: {
+    alignSelf: 'flex-start',
+  },
+  messageText: {
+    fontSize: 16,
+  },
+  senderText: {
+    // color is set inline based on theme
+  },
+  recipientText: {
+    // color is set inline based on theme
+  },
+}); 
