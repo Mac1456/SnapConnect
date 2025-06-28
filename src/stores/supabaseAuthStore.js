@@ -276,7 +276,7 @@ export const useSupabaseAuthStore = create((set, get) => ({
       if (!user) {
         console.error('🟢 SupabaseAuthStore: No authenticated user for profile update');
         set({ error: 'User not authenticated' });
-        return;
+        return { success: false, error: 'User not authenticated' };
       }
 
       console.log('🟢 SupabaseAuthStore: Updating profile with data:', userData);
@@ -319,7 +319,7 @@ export const useSupabaseAuthStore = create((set, get) => ({
           console.log('🟢 SupabaseAuthStore: Profile image public URL:', profileImageUrl);
         } catch (uploadError) {
           console.error('🟢 SupabaseAuthStore: Failed to upload profile image:', uploadError);
-          // Continue with local URL if upload fails
+          return { success: false, error: 'Failed to upload profile image' };
         }
       }
 
@@ -336,15 +336,17 @@ export const useSupabaseAuthStore = create((set, get) => ({
       if (error) {
         console.error('🟢 SupabaseAuthStore: updateProfile error:', error);
         set({ error: error.message });
-        return;
+        return { success: false, error: error.message };
       }
 
-      // Update local state
+      // Update local state with the new data
       const updatedUser = { 
         ...user, 
         display_name: userData.displayName,
+        displayName: userData.displayName, // Keep both for compatibility
         bio: userData.bio,
         profile_picture: profileImageUrl,
+        profilePicture: profileImageUrl, // Keep both for compatibility
       };
       
       set({ user: updatedUser });
@@ -354,7 +356,7 @@ export const useSupabaseAuthStore = create((set, get) => ({
     } catch (error) {
       console.error('🟢 SupabaseAuthStore: updateProfile error:', error);
       set({ error: error.message });
-      throw error;
+      return { success: false, error: error.message };
     }
   },
 

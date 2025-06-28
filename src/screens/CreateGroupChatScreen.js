@@ -12,7 +12,6 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  ScrollView,
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -62,24 +61,40 @@ const CreateGroupChatScreen = () => {
     if (groupDetailsSuggestions?.groupInterests?.length) setGroupInterests(groupDetailsSuggestions.groupInterests);
   }, [groupDetailsSuggestions]);
   
+  // Update recommended friends when AI suggestions are available
+  useEffect(() => {
+    if (groupMemberRecommendations.length > 0) {
+      const newSelectedFriendIds = new Set(groupMemberRecommendations.map(f => f.id));
+      setSelectedFriendIds(newSelectedFriendIds);
+    }
+  }, [groupMemberRecommendations]);
+
   const handleCreateGroup = async () => {
+    // Filter out undefined or null IDs before creating the group
+    const validMemberIds = [...selectedFriendIds].filter(id => id);
     if (!groupName.trim()) {
-      Alert.alert('Group Name Required', 'Please enter a name for your group.');
-      return;
+      return Alert.alert('Group Name Required', 'Please enter a name for your group.');
     }
-    if (selectedFriendIds.size === 0) {
-      Alert.alert('Add Members', 'Please add at least one friend to the group.');
-      return;
-    }
+    // We can allow creating a group with just the creator
+    // if (validMemberIds.length === 0) {
+    //   return Alert.alert('Add Members', 'Please select at least one friend.');
+    // }
 
-    const memberIds = Array.from(selectedFriendIds);
-    const result = await createGroupChat(groupName.trim(), groupInterests.join(', '), memberIds);
-
-    if (result) {
-      console.log('🎉 CreateGroupChatScreen: Group created successfully:', result.id);
-      navigation.goBack();
-    } else {
-      Alert.alert('Error', 'Failed to create group chat. Please try again.');
+    try {
+      const newGroup = await createGroupChat(groupName.trim(), interestInput, validMemberIds);
+      if (newGroup) {
+        // Navigate to the newly created chat screen
+        navigation.replace('GroupChat', { 
+          groupChatId: newGroup.id,
+          groupName: newGroup.name,
+          isNewGroup: true,
+        });
+      } else {
+        Alert.alert('Error', 'Failed to create group. The group data was not returned.');
+      }
+    } catch (err) {
+      console.error('Error creating group:', err);
+      Alert.alert('Error', `Failed to create group: ${err.message}`);
     }
   };
 
@@ -104,170 +119,164 @@ const CreateGroupChatScreen = () => {
     setSelectedFriendIds(newSet);
   };
   
-  const handleGetDetails = () => {
-    const memberIds = Array.from(selectedFriendIds);
-    if (memberIds.length < 1) {
-      Alert.alert('Select Friends', 'Please select at least one friend to get suggestions.');
-      return;
+  const handleGetRecommendations = () => {
+    const memberIds = [...selectedFriendIds];
+    if (memberIds.length === 0) {
+      // If no members are selected, recommend based on the current user
+      if (user?.id) {
+        getGroupDetailsRecommendations([user.id]);
+      } else {
+        Alert.alert("Authentication Error", "Could not identify the current user.");
+      }
+    } else {
+      getGroupDetailsRecommendations(memberIds);
     }
-    getGroupDetailsRecommendations([user.id, ...memberIds]);
-  };
-  
-  const handleGetMembers = () => {
-    if (!groupName.trim() && groupInterests.length === 0) {
-      Alert.alert('Provide Context', 'Please enter a group name or some interests to get member suggestions.');
-      return;
-    }
-    const friendIds = friends.map(f => f.id);
-    getGroupMemberRecommendations(groupName, groupInterests, friendIds);
   };
 
+  const handleGetMemberRecommendations = () => {
+    if (!groupName && groupInterests.length === 0) {
+      return Alert.alert(
+        'Missing Information',
+        'Please enter a group name or some interests to get member recommendations.'
+      );
+    }
+    const theme = `Group Name: ${groupName}. Interests: ${groupInterests.join(', ')}`;
+    getGroupMemberRecommendations(theme);
+  };
+  
   const filteredFriends = useMemo(() => {
+    if (!searchQuery) return friends;
     return friends.filter(friend =>
-      friend.display_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      friend.username?.toLowerCase().includes(searchQuery.toLowerCase())
+      friend.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      friend.display_name.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [friends, searchQuery]);
 
-  const recommendedFriendIds = useMemo(() => new Set(groupMemberRecommendations.map(f => f.id)), [groupMemberRecommendations]);
-  const selectedFriends = useMemo(() => friends.filter(f => selectedFriendIds.has(f.id)), [friends, selectedFriendIds]);
+  const recommendedFriends = useMemo(() => {
+    if (groupMemberRecommendations.length === 0) return [];
+    return friends.filter(f => groupMemberRecommendations.includes(f.id));
+  }, [groupMemberRecommendations, friends]);
 
-  const renderFriendItem = ({ item }) => (
-    <TouchableOpacity style={styles.friendItem} onPress={() => toggleFriendSelection(item.id)}>
-      <Image source={{ uri: item.profile_picture || 'https://via.placeholder.com/40' }} style={styles.friendAvatar} />
-      <View style={styles.friendInfo}>
-        <Text style={styles.friendName}>{item.display_name}</Text>
-        <Text style={styles.friendUsername}>@{item.username}</Text>
-      </View>
-      <Ionicons
-        name={selectedFriendIds.has(item.id) ? 'checkmark-circle' : 'ellipse-outline'}
-        size={24}
-        color={selectedFriendIds.has(item.id) ? colors.primary : colors.border}
-      />
-    </TouchableOpacity>
-  );
+  const nonRecommendedFriends = useMemo(() => {
+    if (groupMemberRecommendations.length === 0) return filteredFriends;
+    return filteredFriends.filter(f => !groupMemberRecommendations.includes(f.id));
+  }, [filteredFriends, groupMemberRecommendations]);
+
+  const renderFriendItem = ({ item: friend }) => {
+    const isSelected = selectedFriendIds.has(friend.id);
+    return (
+      <TouchableOpacity
+        style={[styles.friendItem, isSelected && styles.selectedFriend]}
+        onPress={() => toggleFriendSelection(friend.id)}
+      >
+        <Image
+          source={{ uri: friend.profile_picture || 'https://via.placeholder.com/40' }}
+          style={styles.friendAvatar}
+        />
+        <View style={styles.friendInfo}>
+          <Text style={styles.friendName}>{friend.display_name}</Text>
+          <Text style={styles.friendUsername}>@{friend.username}</Text>
+        </View>
+        <Ionicons
+          name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
+          size={24}
+          color={isSelected ? colors.primary : colors.text}
+        />
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
       >
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Ionicons name="close" size={30} color={colors.text} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>New Group</Text>
-          <TouchableOpacity
-            style={[styles.createButton, (groupLoading || !groupName.trim() || selectedFriendIds.size === 0) && styles.disabledButton]}
-            onPress={handleCreateGroup}
-            disabled={groupLoading || !groupName.trim() || selectedFriendIds.size === 0}
-          >
-            {groupLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.createButtonText}>Create</Text>}
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
-          {/* Group Name */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Group Name</Text>
-            <TextInput
-              style={styles.input}
-              value={groupName}
-              onChangeText={setGroupName}
-              placeholder="e.g., Weekend Warriors"
-              placeholderTextColor={colors.border}
-            />
+        <View style={{flex: 1}}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => navigation.goBack()}>
+              <Ionicons name="close" size={28} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={styles.title}>New Group Chat</Text>
+            <TouchableOpacity onPress={handleCreateGroup} disabled={groupLoading}>
+              {groupLoading ? <ActivityIndicator color={colors.primary} /> : <Text style={styles.createButton}>Create</Text>}
+            </TouchableOpacity>
           </View>
           
-          {/* Group Interests */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Interests</Text>
-            <View style={styles.interestInputContainer}>
-              <TextInput
-                style={[styles.input, { flex: 1 }]}
-                value={interestInput}
-                onChangeText={setInterestInput}
-                placeholder="Add interests (hiking, memes...)"
-                placeholderTextColor={colors.border}
-                onSubmitEditing={handleAddInterest}
-              />
-              <TouchableOpacity style={styles.addButton} onPress={handleAddInterest}>
-                <Ionicons name="add" size={24} color={colors.primary} />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.tagContainer}>
-              {groupInterests.map((interest, index) => (
-                <TouchableOpacity key={index} style={styles.tag} onPress={() => handleRemoveInterest(interest)}>
-                  <Text style={styles.tagText}>{interest}</Text>
-                  <Ionicons name="close-circle" size={16} color={colors.card} style={{ marginLeft: 5 }} />
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* AI Buttons */}
-          <View style={styles.aiButtonContainer}>
-            <TouchableOpacity style={styles.aiButton} onPress={handleGetDetails} disabled={aiLoading}>
-              {aiLoading ? <ActivityIndicator /> : <><Ionicons name="sparkles" size={18} color={colors.primary} /><Text style={styles.aiButtonText}>Suggest Name & Interests</Text></>}
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.aiButton} onPress={handleGetMembers} disabled={aiLoading}>
-               {aiLoading ? <ActivityIndicator /> : <><Ionicons name="people" size={18} color={colors.primary} /><Text style={styles.aiButtonText}>Suggest Members</Text></>}
-            </TouchableOpacity>
-          </View>
-
-          {/* Members Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Members ({selectedFriendIds.size})</Text>
-             {selectedFriends.length > 0 && (
-                <View style={styles.selectedFriendsContainer}>
-                    <FlatList
-                        horizontal
-                        data={selectedFriends}
-                        keyExtractor={item => item.id}
-                        renderItem={({ item }) => (
-                            <View style={styles.selectedFriend}>
-                                <Image source={{ uri: item.profile_picture || 'https://via.placeholder.com/40' }} style={styles.selectedFriendAvatar} />
-                                <Text style={styles.selectedFriendName} numberOfLines={1}>{item.display_name}</Text>
-                                <TouchableOpacity onPress={() => toggleFriendSelection(item.id)} style={styles.removeFriendButton}>
-                                    <Ionicons name="close-circle" size={20} color={colors.notification} />
-                                </TouchableOpacity>
-                            </View>
-                        )}
-                        showsHorizontalScrollIndicator={false}
-                    />
+          <FlatList
+            ListHeaderComponent={
+              <>
+                <View style={styles.inputSection}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Group Name"
+                    placeholderTextColor={colors.placeholder}
+                    value={groupName}
+                    onChangeText={setGroupName}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Add interests (e.g., hiking, gaming)"
+                    placeholderTextColor={colors.placeholder}
+                    value={interestInput}
+                    onChangeText={setInterestInput}
+                    onSubmitEditing={() => {
+                      if (interestInput) {
+                        setGroupInterests([...groupInterests, interestInput]);
+                        setInterestInput('');
+                      }
+                    }}
+                  />
+                  <View style={styles.interestsContainer}>
+                    {groupInterests.map((interest, index) => (
+                      <View key={index} style={styles.interestTag}>
+                        <Text style={styles.interestText}>{interest}</Text>
+                        <TouchableOpacity onPress={() => setGroupInterests(groupInterests.filter(i => i !== interest))}>
+                          <Ionicons name="close-circle" size={16} color={colors.background} />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
                 </View>
-            )}
-            <TextInput
-              style={styles.input}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Search friends..."
-              placeholderTextColor={colors.border}
-            />
-          </View>
 
-          {groupMemberRecommendations.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>✨ Recommended</Text>
-              <FlatList
-                data={groupMemberRecommendations}
-                renderItem={renderFriendItem}
-                keyExtractor={item => item.id}
-              />
-            </View>
-          )}
+                <View style={styles.aiButtons}>
+                  <TouchableOpacity style={styles.aiButton} onPress={handleGetRecommendations} disabled={aiLoading}>
+                    {aiLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.aiButtonText}>Suggest Details</Text>}
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.aiButton} onPress={handleGetMemberRecommendations} disabled={aiLoading}>
+                    {aiLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.aiButtonText}>Suggest Members</Text>}
+                  </TouchableOpacity>
+                </View>
 
-          <View style={[styles.section, { flex: 1 }]}>
-             <Text style={styles.sectionTitle}>All Friends</Text>
-             <FlatList
-                data={filteredFriends.filter(f => !recommendedFriendIds.has(f.id))}
-                renderItem={renderFriendItem}
-                keyExtractor={item => item.id}
-              />
-          </View>
-          
-        </ScrollView>
+                {aiError && <Text style={styles.errorText}>AI Error: {aiError}</Text>}
+                
+                <View style={styles.searchContainer}>
+                  <Ionicons name="search" size={20} color={colors.placeholder} style={styles.searchIcon} />
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search Friends"
+                    placeholderTextColor={colors.placeholder}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                  />
+                </View>
+
+                {recommendedFriends.length > 0 && (
+                  <>
+                    <Text style={styles.listHeader}>Recommended</Text>
+                    {recommendedFriends.map(friend => renderFriendItem({ item: friend }))}
+                    <Text style={styles.listHeader}>All Friends</Text>
+                  </>
+                )}
+              </>
+            }
+            data={nonRecommendedFriends}
+            renderItem={renderFriendItem}
+            keyExtractor={item => item.id.toString()}
+            showsVerticalScrollIndicator={false}
+          />
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -302,6 +311,17 @@ const createStyles = (colors) => StyleSheet.create({
     selectedFriendAvatar: { width: 50, height: 50, borderRadius: 25 },
     selectedFriendName: { color: colors.text, fontSize: 12, marginTop: 5, width: '100%', textAlign: 'center' },
     removeFriendButton: { position: 'absolute', top: -5, right: -5, backgroundColor: colors.background, borderRadius: 10 },
+    title: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: 'bold', color: colors.text },
+    inputSection: { marginBottom: 20 },
+    interestsContainer: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10 },
+    interestTag: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary, borderRadius: 15, paddingVertical: 5, paddingHorizontal: 10, marginRight: 5, marginBottom: 5 },
+    interestText: { color: '#fff' },
+    aiButtons: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 20 },
+    errorText: { color: colors.notification, marginTop: 10, textAlign: 'center' },
+    searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, padding: 10, borderRadius: 10 },
+    searchIcon: { marginRight: 10 },
+    searchInput: { flex: 1 },
+    listHeader: { fontSize: 16, fontWeight: 'bold', color: colors.text, marginTop: 10, marginBottom: 5 },
 });
 
 export default CreateGroupChatScreen; 

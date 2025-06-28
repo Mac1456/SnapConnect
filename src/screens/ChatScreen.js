@@ -11,11 +11,87 @@ import {
   Alert,
   Image,
   StyleSheet,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSupabaseAuthStore as useAuthStore } from '../stores/supabaseAuthStore';
 import { useThemeStore } from '../stores/themeStore';
 import { supabase } from '../../supabase.config';
+import { useTheme } from '@react-navigation/native';
+
+const createStyles = (colors) => StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginLeft: 10,
+    color: colors.text,
+  },
+  messageList: {
+    flex: 1,
+    paddingHorizontal: 10,
+  },
+  messageContainer: {
+    marginVertical: 5,
+  },
+  myMessage: {
+    alignSelf: 'flex-end',
+    backgroundColor: colors.primary,
+    padding: 10,
+    borderRadius: 15,
+    maxWidth: '80%',
+  },
+  theirMessage: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.card,
+    padding: 10,
+    borderRadius: 15,
+    maxWidth: '80%',
+  },
+  messageText: {
+    fontSize: 16,
+    color: 'white',
+  },
+  theirMessageText: {
+    color: colors.text,
+  },
+  timestamp: {
+    fontSize: 10,
+    color: 'white',
+    opacity: 0.7,
+    alignSelf: 'flex-end',
+    marginTop: 5,
+  },
+  theirTimestamp: {
+    color: colors.text,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  input: {
+    flex: 1,
+    height: 40,
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    backgroundColor: colors.card,
+    color: colors.text,
+    marginRight: 10,
+  },
+});
 
 export default function ChatScreen({ navigation, route }) {
   const { recipientId, recipientUsername, recipientName, isGroup = false, groupName = null } = route.params;
@@ -28,7 +104,8 @@ export default function ChatScreen({ navigation, route }) {
   const flatListRef = useRef(null);
   
   const { user } = useAuthStore();
-  const { currentTheme } = useThemeStore();
+  const { colors } = useTheme();
+  const styles = createStyles(colors);
 
   const currentUserId = user?.uid || user?.id || user?.userId;
 
@@ -228,7 +305,7 @@ export default function ChatScreen({ navigation, route }) {
         console.error('💬 ChatScreen: Error sending message:', error);
         // Remove optimistic message on error
         setMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id));
-        Alert.alert('Error', 'Failed to send message');
+        Alert.alert('Error', 'An unexpected error occurred while sending the message.');
         return;
       }
 
@@ -251,96 +328,36 @@ export default function ChatScreen({ navigation, route }) {
       console.error('💬 ChatScreen: Error in sendMessage:', error);
       // Remove optimistic message on error
       setMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id));
-      Alert.alert('Error', 'Failed to send message');
+      Alert.alert('Error', 'An unexpected error occurred while sending the message.');
     } finally {
       setLoading(false);
     }
   };
 
   const formatTime = (timestamp) => {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (!timestamp) return '';
+    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   const handleProfilePress = () => {
-    // Navigate to user profile (to be implemented)
-    Alert.alert('Profile', `View ${recipientName}'s profile`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'View Profile', onPress: () => {
-        // TODO: Navigate to profile screen
-        console.log('Navigate to profile for user:', recipientId);
-      }}
-    ]);
+    // Prevent navigation if there's no recipient or it's a group chat.
+    // Future enhancement: navigate to a group profile screen.
+    if (!recipientId || isGroup) return;
+
+    navigation.navigate('Profile', {
+      userId: recipientId,
+    });
   };
 
   const renderMessage = ({ item }) => {
-    if (!item) return null;
-
-    const isSender = item.senderId === currentUserId;
-    const messageDate = new Date(item.timestamp);
-
-    // Handle 'snap' type messages
-    if (item.message_type === 'snap') {
-      const snapText = isSender ? 'You sent a snap' : 'You received a snap';
-      const snapIcon = isSender ? 'arrow-up-circle' : 'arrow-down-circle';
-      const isOpened = item.opened; // Assuming your message has an 'opened' field
-
-      return (
-        <View style={[
-          styles.messageContainer,
-          isSender ? styles.senderContainer : styles.recipientContainer,
-          isOpened ? { opacity: 0.6 } : {}
-        ]}>
-          <Ionicons name={snapIcon} size={20} color={isSender ? currentTheme.colors.text : currentTheme.colors.text} style={{ marginRight: 8 }} />
-          <Text style={[styles.messageText, { color: isSender ? currentTheme.colors.text : currentTheme.colors.text }]}>
-            {snapText} {isOpened ? '· Opened' : '· Tap to view'}
-          </Text>
-        </View>
-      );
-    }
-
-    // Handle regular text messages
     return (
-      <View style={[styles.messageContainer, isSender ? styles.senderContainer : styles.recipientContainer]}>
-        <View style={{
-          backgroundColor: isSender 
-            ? currentTheme.colors.chatBubbleSent 
-            : currentTheme.colors.chatBubbleReceived,
-          borderRadius: 18,
-          paddingHorizontal: 16,
-          paddingVertical: 10,
-          maxWidth: '75%',
-          marginHorizontal: 8,
-          borderWidth: 2,
-          borderColor: isSender 
-            ? currentTheme.colors.snapPink 
-            : currentTheme.colors.borderStrong,
-          shadowColor: currentTheme.colors.shadow,
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.3,
-          shadowRadius: 4,
-          elevation: 4,
-        }}>
-          <Text style={{
-            color: isSender 
-              ? currentTheme.colors.chatBubbleTextSent 
-              : currentTheme.colors.chatBubbleTextReceived,
-            fontSize: 16,
-            fontWeight: '500',
-          }}>
+      <View style={styles.messageContainer}>
+        <View style={item.isCurrentUser ? styles.myMessage : styles.theirMessage}>
+          <Text style={item.isCurrentUser ? styles.messageText : styles.theirMessageText}>
             {item.text}
           </Text>
-          <Text style={{
-            color: isSender 
-              ? currentTheme.colors.chatBubbleTextSent + '80'
-              : currentTheme.colors.chatBubbleTextReceived + '80',
-            fontSize: 12,
-            marginTop: 4,
-            textAlign: isSender ? 'right' : 'left',
-          }}>
-            {messageDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            {item.isOptimistic && ' ⏳'}
-            {item.isDisappearing && ' 🕒'}
+          <Text style={item.isCurrentUser ? styles.timestamp : styles.theirTimestamp}>
+            {formatTime(item.timestamp)}
           </Text>
         </View>
       </View>
@@ -348,349 +365,47 @@ export default function ChatScreen({ navigation, route }) {
   };
 
   return (
-    <SafeAreaView style={{ 
-      flex: 1, 
-      backgroundColor: currentTheme.colors.background 
-    }}>
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={handleProfilePress}>
+          <Text style={styles.headerTitle}>{recipientName || recipientUsername}</Text>
+        </TouchableOpacity>
+        <View style={{width: 24}} /> 
+      </View>
+
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        keyboardVerticalOffset={90}
       >
-        {/* Header */}
-        <View style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          padding: 16,
-          backgroundColor: currentTheme.colors.surface,
-          borderBottomWidth: 2,
-          borderBottomColor: currentTheme.colors.snapYellow,
-          shadowColor: currentTheme.colors.shadowStrong,
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 8,
-          elevation: 8,
-        }}>
-          <TouchableOpacity
-            onPress={() => {
-              console.log('💬 ChatScreen: Back button pressed');
-              navigation.goBack();
-            }}
-            style={{
-              padding: 8,
-              borderRadius: 20,
-              backgroundColor: currentTheme.colors.snapPink,
-              borderWidth: 2,
-              borderColor: currentTheme.colors.snapYellow,
-              marginRight: 12,
-            }}
-          >
-            <Ionicons name="arrow-back" size={24} color={currentTheme.colors.textInverse} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={handleProfilePress}
-            style={{
-              width: 50,
-              height: 50,
-              borderRadius: 25,
-              backgroundColor: currentTheme.colors.snapYellow,
-              borderWidth: 2,
-              borderColor: currentTheme.colors.snapPink,
-              justifyContent: 'center',
-              alignItems: 'center',
-              marginRight: 12,
-            }}
-          >
-            <Text style={{
-              fontSize: 18,
-              fontWeight: 'bold',
-              color: currentTheme.colors.textInverse,
-            }}>
-              {(recipientName || recipientUsername)?.charAt(0)?.toUpperCase() || '?'}
-            </Text>
-          </TouchableOpacity>
-
-          <View style={{ flex: 1 }}>
-            <Text style={{
-              fontSize: 18,
-              fontWeight: 'bold',
-              color: currentTheme.colors.text,
-            }}>
-              {isGroup ? (groupName || 'Group Chat') : (recipientName || recipientUsername)}
-            </Text>
-            <Text style={{
-              fontSize: 14,
-              color: currentTheme.colors.textSecondary,
-            }}>
-              {isGroup ? 'Group chat' : 'Active now'}
-              {disappearTimer && ` • Disappearing: ${disappearTimer < 60 ? `${disappearTimer}s` : `${Math.floor(disappearTimer / 60)}m`}`}
-            </Text>
-          </View>
-
-          {/* Disappearing Message Timer Button */}
-          <TouchableOpacity
-            onPress={() => {
-              console.log('💬 ChatScreen: Timer button pressed');
-              setShowDisappearTimer(!showDisappearTimer);
-            }}
-            style={{
-              padding: 8,
-              borderRadius: 15,
-              backgroundColor: disappearTimer ? currentTheme.colors.snapYellow : currentTheme.colors.surface,
-              borderWidth: 2,
-              borderColor: currentTheme.colors.borderStrong,
-              marginLeft: 8,
-            }}
-          >
-            <Ionicons 
-              name="timer-outline" 
-              size={20} 
-              color={disappearTimer ? currentTheme.colors.textInverse : currentTheme.colors.textSecondary} 
-            />
-          </TouchableOpacity>
-        </View>
-
-        {/* Messages List */}
         <FlatList
           ref={flatListRef}
           data={messages}
-          keyExtractor={(item) => item.id.toString()}
           renderItem={renderMessage}
-          style={{ 
-            flex: 1, 
-            backgroundColor: currentTheme.colors.background,
-            paddingHorizontal: 16,
-          }}
-          contentContainerStyle={{ paddingVertical: 16 }}
-          showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => {
-            if (flatListRef.current && messages.length > 0) {
-              flatListRef.current.scrollToEnd({ animated: false });
-            }
-          }}
-          ListEmptyComponent={
-            <View style={{
-              flex: 1,
-              justifyContent: 'center',
-              alignItems: 'center',
-              paddingVertical: 40,
-            }}>
-              <Text style={{
-                fontSize: 18,
-                fontWeight: 'bold',
-                color: currentTheme.colors.text,
-                marginBottom: 8,
-              }}>
-                Start the conversation!
-              </Text>
-              <Text style={{
-                fontSize: 14,
-                color: currentTheme.colors.textSecondary,
-                textAlign: 'center',
-              }}>
-                Send a message to {recipientName || recipientUsername}
-              </Text>
-            </View>
-          }
+          keyExtractor={(item) => item.id.toString()}
+          style={styles.messageList}
+          contentContainerStyle={{ paddingTop: 10 }}
         />
-
-        {/* Input Area */}
-        <View style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          padding: 16,
-          backgroundColor: currentTheme.colors.surface,
-          borderTopWidth: 2,
-          borderTopColor: currentTheme.colors.snapYellow,
-          shadowColor: currentTheme.colors.shadowStrong,
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 8,
-          elevation: 8,
-        }}>
-          {/* Camera Snap Button */}
-          <TouchableOpacity
-            onPress={() => {
-              console.log('💬 ChatScreen: Camera snap button pressed');
-              navigation.navigate('Camera', { 
-                directSendTo: recipientId,
-                recipientName: recipientName || recipientUsername 
-              });
-            }}
-            style={{
-              width: 50,
-              height: 50,
-              borderRadius: 25,
-              backgroundColor: currentTheme.colors.snapPink,
-              justifyContent: 'center',
-              alignItems: 'center',
-              marginRight: 12,
-              borderWidth: 2,
-              borderColor: currentTheme.colors.snapYellow,
-              shadowColor: currentTheme.colors.snapPink,
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.4,
-              shadowRadius: 8,
-              elevation: 8,
-            }}
-          >
-            <Ionicons name="camera" size={24} color={currentTheme.colors.textInverse} />
-          </TouchableOpacity>
-
-          <View style={{
-            flex: 1,
-            flexDirection: 'row',
-            alignItems: 'center',
-            backgroundColor: currentTheme.colors.background,
-            borderRadius: 25,
-            borderWidth: 2,
-            borderColor: currentTheme.colors.borderStrong,
-            paddingHorizontal: 16,
-            paddingVertical: 8,
-            marginRight: 12,
-            shadowColor: currentTheme.colors.shadow,
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.3,
-            shadowRadius: 8,
-            elevation: 6,
-          }}>
-            <TextInput
-              value={newMessage}
-              onChangeText={(text) => {
-                console.log('💬 ChatScreen: Message text changed:', text);
-                setNewMessage(text);
-              }}
-              placeholder={`Message ${recipientName || recipientUsername}...`}
-              placeholderTextColor={currentTheme.colors.textTertiary}
-              style={{
-                flex: 1,
-                fontSize: 16,
-                color: currentTheme.colors.text,
-                maxHeight: 100,
-              }}
-              multiline
-              onSubmitEditing={() => {
-                if (!loading && newMessage.trim()) {
-                  console.log('💬 ChatScreen: Message submitted via keyboard');
-                  sendMessage();
-                }
-              }}
-              returnKeyType="send"
-              blurOnSubmit={false}
-            />
-          </View>
-
-          <TouchableOpacity
-            onPress={() => {
-              console.log('💬 ChatScreen: Send button pressed');
-              sendMessage();
-            }}
-            disabled={!newMessage.trim() || loading}
-            style={{
-              width: 50,
-              height: 50,
-              borderRadius: 25,
-              backgroundColor: currentTheme.colors.snapYellow,
-              justifyContent: 'center',
-              alignItems: 'center',
-              opacity: (!newMessage.trim() || loading) ? 0.5 : 1,
-              borderWidth: 2,
-              borderColor: currentTheme.colors.snapPink,
-              shadowColor: currentTheme.colors.snapYellow,
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.4,
-              shadowRadius: 8,
-              elevation: 8,
-            }}
-          >
-            <Ionicons 
-              name={loading ? "hourglass" : "send"} 
-              size={24} 
-              color={currentTheme.colors.textInverse} 
-            />
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            value={newMessage}
+            onChangeText={setNewMessage}
+            placeholder="Type a message..."
+            placeholderTextColor="#888"
+          />
+          <TouchableOpacity onPress={sendMessage} disabled={loading}>
+            {loading ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Ionicons name="send" size={24} color={colors.primary} />
+            )}
           </TouchableOpacity>
         </View>
-
-        {/* Disappearing Timer Options Modal */}
-        {showDisappearTimer && (
-          <View style={{
-            position: 'absolute',
-            bottom: 100,
-            right: 16,
-            backgroundColor: currentTheme.colors.surface,
-            borderRadius: 15,
-            borderWidth: 2,
-            borderColor: currentTheme.colors.snapYellow,
-            padding: 12,
-            shadowColor: currentTheme.colors.shadow,
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.3,
-            shadowRadius: 8,
-            elevation: 8,
-            minWidth: 150,
-          }}>
-            <Text style={{
-              fontSize: 14,
-              fontWeight: 'bold',
-              color: currentTheme.colors.text,
-              marginBottom: 8,
-              textAlign: 'center',
-            }}>
-              Disappearing Messages
-            </Text>
-            {timerOptions.map((option) => (
-              <TouchableOpacity
-                key={option.value}
-                onPress={() => {
-                  console.log('💬 ChatScreen: Timer option selected:', option.label);
-                  setDisappearTimer(option.value);
-                  setShowDisappearTimer(false);
-                }}
-                style={{
-                  paddingVertical: 8,
-                  paddingHorizontal: 12,
-                  borderRadius: 8,
-                  backgroundColor: disappearTimer === option.value ? currentTheme.colors.snapYellow : 'transparent',
-                  marginVertical: 2,
-                }}
-              >
-                <Text style={{
-                  color: disappearTimer === option.value ? currentTheme.colors.textInverse : currentTheme.colors.text,
-                  fontSize: 12,
-                  textAlign: 'center',
-                }}>
-                  {option.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
-}
-
-const styles = StyleSheet.create({
-  messageContainer: {
-    flexDirection: 'row',
-    marginVertical: 5,
-    maxWidth: '80%',
-  },
-  senderContainer: {
-    alignSelf: 'flex-end',
-    flexDirection: 'row-reverse',
-  },
-  recipientContainer: {
-    alignSelf: 'flex-start',
-  },
-  messageText: {
-    fontSize: 16,
-  },
-  senderText: {
-    // color is set inline based on theme
-  },
-  recipientText: {
-    // color is set inline based on theme
-  },
-}); 
+} 

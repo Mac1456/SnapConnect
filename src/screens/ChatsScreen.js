@@ -92,11 +92,17 @@ export default function ChatsScreen({ navigation }) {
         const partnerId = isFromMe ? message.recipient_id : message.sender_id;
         const partner = isFromMe ? message.recipient : message.sender;
         
+        // Skip if partner data is null or missing
+        if (!partner || !partnerId) {
+          console.warn('💬 ChatsScreen: Skipping message with missing partner data:', message.id);
+          return;
+        }
+        
         if (!conversationMap.has(partnerId)) {
           conversationMap.set(partnerId, {
             partnerId,
-            partnerUsername: partner.username,
-            partnerDisplayName: partner.display_name,
+            partnerUsername: partner.username || 'Unknown User',
+            partnerDisplayName: partner.display_name || partner.username || 'Unknown User',
             partnerProfilePicture: partner.profile_picture,
             lastMessage: message.content,
             lastMessageTime: message.created_at,

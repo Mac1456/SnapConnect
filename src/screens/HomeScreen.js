@@ -8,31 +8,80 @@ import {
   Alert,
   Image,
   Modal,
-  TextInput,
-  FlatList,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSupabaseAuthStore as useAuthStore } from '../stores/supabaseAuthStore';
 import { useSupabaseFriendStore as useFriendStore } from '../stores/supabaseFriendStore';
+import { useSupabaseSnapStore as useSnapStore } from '../stores/supabaseSnapStore';
 import { useThemeStore } from '../stores/themeStore';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import UserSwitcher from '../components/UserSwitcher';
 
 export default function HomeScreen({ navigation }) {
   const { user, signOut } = useAuthStore();
   const { currentTheme } = useThemeStore();
-  const { searchUsers, sendFriendRequest, friends } = useFriendStore();
+  const { friends, getFriends } = useFriendStore();
+  const { stories, loadAllStories, setupStoriesListener } = useSnapStore();
   const parentNavigation = useNavigation();
   const [showUserSwitcher, setShowUserSwitcher] = useState(false);
-  const [showFriendSearch, setShowFriendSearch] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [loading, setLoading] = useState(false);
   
   // Mock data for now
   const snaps = [];
   const unreadSnaps = [];
+
+  // Load friends and stories when component mounts or user changes
+  useEffect(() => {
+    if (user && user.uid) {
+      console.log('🏠 HomeScreen: Loading friends and stories for user:', user.uid);
+      getFriends(user.uid);
+      loadAllStories(user.uid);
+      setupStoriesListener(user.uid);
+    }
+  }, [user]);
+
+  // Process stories by user for display
+  const friendStoriesByUser = React.useMemo(() => {
+    console.log('🏠 HomeScreen: Processing stories for display, total stories:', stories?.length || 0);
+    
+    if (!stories || stories.length === 0) {
+      return {};
+    }
+
+    const storiesByUser = {};
+    
+    stories.forEach(story => {
+      const userId = story.userId || story.user_id;
+      if (!storiesByUser[userId]) {
+        storiesByUser[userId] = [];
+      }
+      storiesByUser[userId].push(story);
+    });
+
+    // Sort stories within each user by creation time (newest first)
+    Object.keys(storiesByUser).forEach(userId => {
+      storiesByUser[userId].sort((a, b) => 
+        new Date(b.createdAt || b.created_at) - new Date(a.createdAt || a.created_at)
+      );
+    });
+
+    console.log('🏠 HomeScreen: Stories grouped by user:', Object.keys(storiesByUser).length, 'users');
+    return storiesByUser;
+  }, [stories]);
+
+  const formatTimeAgo = (timestamp) => {
+    const now = new Date();
+    const storyTime = new Date(timestamp);
+    const diffInMinutes = Math.floor((now - storyTime) / (1000 * 60));
+    
+    if (diffInMinutes < 1) return 'now';
+    if (diffInMinutes < 60) return `${diffInMinutes}m`;
+    
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours < 24) return `${diffInHours}h`;
+    
+    return storyTime.toLocaleDateString();
+  };
 
   const navigateToCamera = () => {
     console.log('🏠 HomeScreen: Take Snap button pressed');
@@ -77,81 +126,6 @@ export default function HomeScreen({ navigation }) {
     setShowUserSwitcher(true);
   };
 
-  const handleSearchPress = () => {
-    console.log('🏠 HomeScreen: Search button pressed - showing friend search');
-    setShowFriendSearch(true);
-  };
-
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
-    
-    try {
-      setLoading(true);
-      const results = await searchUsers(searchQuery.trim());
-      
-      // Filter out current user and existing friends
-      const filteredResults = results
-        .filter(u => u.id !== user.uid)
-        .filter(u => !friends.some(friend => friend.id === u.id))
-        .map(u => ({
-          id: u.id,
-          username: u.username,
-          displayName: u.display_name || u.username || u.email?.split('@')[0] || 'Unknown User',
-          email: u.email,
-          profilePicture: u.profile_picture
-        }));
-        
-      console.log('🏠 HomeScreen: Search results:', filteredResults.length);
-      setSearchResults(filteredResults);
-    } catch (error) {
-      console.error('🏠 HomeScreen: Search error:', error);
-      Alert.alert('Error', 'Failed to search users');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSendFriendRequest = async (targetUser) => {
-    try {
-      setLoading(true);
-      console.log('🏠 HomeScreen: Sending friend request to:', targetUser.username);
-      
-      await sendFriendRequest(targetUser.id, targetUser.username);
-      
-      Alert.alert(
-        'Success', 
-        `Friend request sent to ${targetUser.displayName}!`,
-        [{ text: 'OK' }]
-      );
-
-      // Remove user from search results
-      setSearchResults(prev => prev.filter(user => user.id !== targetUser.id));
-    } catch (error) {
-      console.error('🏠 HomeScreen: Friend request error:', error);
-      Alert.alert('Error', 'Failed to send friend request');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSendMessage = (targetUser) => {
-    setShowFriendSearch(false);
-    navigation.navigate('Chat', { 
-      recipientId: targetUser.id,
-      recipientUsername: targetUser.username || targetUser.displayName,
-      recipientName: targetUser.displayName || targetUser.username
-    });
-  };
-
-  const handleSendSnap = (targetUser) => {
-    setShowFriendSearch(false);
-    navigation.navigate('Camera', { 
-      recipientId: targetUser.id,
-      recipientUsername: targetUser.username || targetUser.displayName,
-      mode: 'snap'
-    });
-  };
-
   const handleLogout = () => {
     Alert.alert(
       'Switch User',
@@ -174,118 +148,6 @@ export default function HomeScreen({ navigation }) {
       ]
     );
   };
-
-  const renderSearchResult = ({ item }) => (
-    <View style={{
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: 15,
-      backgroundColor: currentTheme.colors.surface,
-      marginHorizontal: 15,
-      marginVertical: 5,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: currentTheme.colors.border,
-    }}>
-      <View style={{
-        width: 50,
-        height: 50,
-        borderRadius: 25,
-        backgroundColor: currentTheme.colors.primary,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-      }}>
-        {item.profilePicture ? (
-          <Image 
-            source={{ uri: item.profilePicture }} 
-            style={{ width: 50, height: 50, borderRadius: 25 }}
-          />
-        ) : (
-          <Text style={{ 
-            fontSize: 18, 
-            fontWeight: 'bold',
-            color: currentTheme.colors.background 
-          }}>
-            {(item.username || item.displayName)?.charAt(0).toUpperCase()}
-          </Text>
-        )}
-      </View>
-      
-      <View style={{ flex: 1 }}>
-        <Text style={{
-          fontSize: 16,
-          fontWeight: 'bold',
-          color: currentTheme.colors.text,
-        }}>
-          {item.displayName}
-        </Text>
-        <Text style={{
-          fontSize: 14,
-          color: currentTheme.colors.textSecondary,
-        }}>
-          @{item.username}
-        </Text>
-      </View>
-
-      <View style={{ flexDirection: 'row', gap: 6 }}>
-        <TouchableOpacity
-          onPress={() => handleSendFriendRequest(item)}
-          disabled={loading}
-          style={{
-            backgroundColor: currentTheme.colors.primary,
-            borderRadius: 16,
-            paddingHorizontal: 10,
-            paddingVertical: 6,
-          }}
-        >
-          <Text style={{
-            color: currentTheme.colors.background,
-            fontWeight: 'bold',
-            fontSize: 11,
-          }}>
-            Add
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          onPress={() => handleSendMessage(item)}
-          style={{
-            backgroundColor: currentTheme.colors.border,
-            borderRadius: 16,
-            paddingHorizontal: 10,
-            paddingVertical: 6,
-          }}
-        >
-          <Text style={{
-            color: currentTheme.colors.text,
-            fontWeight: 'bold',
-            fontSize: 11,
-          }}>
-            Message
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          onPress={() => handleSendSnap(item)}
-          style={{
-            backgroundColor: currentTheme.colors.secondary || currentTheme.colors.border,
-            borderRadius: 16,
-            paddingHorizontal: 10,
-            paddingVertical: 6,
-          }}
-        >
-          <Text style={{
-            color: currentTheme.colors.text,
-            fontWeight: 'bold',
-            fontSize: 11,
-          }}>
-            Snap
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
 
   return (
           <LinearGradient
@@ -330,7 +192,7 @@ export default function HomeScreen({ navigation }) {
           <Text style={{ color: currentTheme.colors.text }} className="text-2xl font-bold drop-shadow-lg">SnapConnect</Text>
           
           <TouchableOpacity 
-            onPress={handleSearchPress}
+            onPress={() => navigation.navigate('Friends')}
             style={{
               width: 48,
               height: 48,
@@ -345,7 +207,7 @@ export default function HomeScreen({ navigation }) {
               elevation: 4,
             }}
           >
-            <Ionicons name="search" size={24} color={currentTheme.colors.accent} />
+            <Ionicons name="people-outline" size={24} color={currentTheme.colors.accent} />
           </TouchableOpacity>
         </View>
 
@@ -368,61 +230,94 @@ export default function HomeScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Snap Map Placeholder */}
+        {/* Friends' Stories */}
         <View className="flex-1 mx-4 mb-4">
           <View 
             style={{ backgroundColor: currentTheme.colors.surface }}
-            className="rounded-3xl flex-1 items-center justify-center backdrop-blur-lg"
+            className="rounded-3xl flex-1 backdrop-blur-lg p-6"
           >
-            <Ionicons name="location" size={80} color={currentTheme.colors.text} />
-            <Text style={{ color: currentTheme.colors.text }} className="text-2xl font-bold mt-4 drop-shadow-lg">🗺️ Snap Map</Text>
-            <Text style={{ color: currentTheme.colors.textSecondary }} className="text-center mt-2 px-8 text-lg">
-              See where your friends are and discover what's happening around you
-            </Text>
+            <Text style={{ color: currentTheme.colors.text }} className="text-2xl font-bold mb-4 drop-shadow-lg">📖 Friends' Stories</Text>
             
-            {/* Recent Activity */}
-            <View className="mt-8 w-full px-6">
-              <Text style={{ color: currentTheme.colors.text }} className="text-xl font-bold mb-4 drop-shadow-lg">✨ Recent Activity</Text>
-              
-              {unreadSnaps.length > 0 ? (
-                <ScrollView className="max-h-40">
-                  {unreadSnaps.map((snap, index) => (
+            {Object.keys(friendStoriesByUser).length > 0 ? (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {Object.keys(friendStoriesByUser).map((userId) => {
+                  const userStories = friendStoriesByUser[userId];
+                  const latestStory = userStories[0];
+                  const hasViewed = user && user.uid ? latestStory.views?.includes(user.uid) : false;
+                  
+                  return (
                     <TouchableOpacity
-                      key={index}
+                      key={userId}
+                      onPress={() => navigation.navigate('StoryView', { 
+                        stories: userStories, 
+                        initialIndex: 0 
+                      })}
                       style={{ backgroundColor: currentTheme.colors.background }}
-                      className="flex-row items-center p-3 rounded-xl mb-2 backdrop-blur-lg"
-                      onPress={() => navigation.navigate('StoryView', { snap })}
+                      className="flex-row items-center p-4 rounded-xl mb-3 backdrop-blur-lg"
                     >
-                      <View className="w-10 h-10 rounded-full bg-yellow-400 items-center justify-center mr-3">
-                        <Text className="font-bold text-black">
-                          {snap.sender?.charAt(0).toUpperCase()}
-                        </Text>
+                      <View 
+                        style={{ 
+                          borderColor: hasViewed ? currentTheme.colors.textSecondary : currentTheme.colors.primary,
+                          borderWidth: 3,
+                        }}
+                        className="w-16 h-16 rounded-full overflow-hidden mr-4"
+                      >
+                        {latestStory.mediaType === 'image' ? (
+                          <Image 
+                            source={{ uri: latestStory.mediaUrl || latestStory.media_url }} 
+                            className="w-full h-full" 
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <View 
+                            style={{ backgroundColor: currentTheme.colors.surface }}
+                            className="w-full h-full items-center justify-center"
+                          >
+                            <Ionicons name="play" size={24} color={currentTheme.colors.text} />
+                          </View>
+                        )}
                       </View>
+                      
                       <View className="flex-1">
-                        <Text style={{ color: currentTheme.colors.text }} className="font-bold">
-                          {snap.sender}
+                        <Text style={{ color: currentTheme.colors.text }} className="font-bold text-lg">
+                          {latestStory.displayName || latestStory.display_name || latestStory.username}
                         </Text>
                         <Text style={{ color: currentTheme.colors.textSecondary }} className="text-sm">
-                          Sent you a snap
+                          {userStories.length} {userStories.length === 1 ? 'story' : 'stories'} • {formatTimeAgo(latestStory.createdAt || latestStory.created_at)}
                         </Text>
+                        {latestStory.caption && (
+                          <Text style={{ color: currentTheme.colors.textSecondary }} className="text-sm mt-1" numberOfLines={1}>
+                            "{latestStory.caption}"
+                          </Text>
+                        )}
                       </View>
-                      <Text style={{ color: currentTheme.colors.textSecondary }} className="text-xs">
-                        {snap.timestamp}
-                      </Text>
+                      
+                      {!hasViewed && (
+                        <View 
+                          style={{ backgroundColor: currentTheme.colors.primary }}
+                          className="w-3 h-3 rounded-full" 
+                        />
+                      )}
                     </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              ) : (
-                <View className="items-center py-8">
-                  <Text style={{ color: currentTheme.colors.textSecondary }} className="text-lg">
-                    No recent activity
-                  </Text>
-                  <Text style={{ color: currentTheme.colors.textSecondary }} className="text-sm mt-2">
-                    Start snapping with friends!
-                  </Text>
-                </View>
-              )}
-            </View>
+                  );
+                })}
+              </ScrollView>
+            ) : (
+              <View className="items-center justify-center flex-1">
+                <Ionicons name="people-outline" size={80} color={currentTheme.colors.text} />
+                <Text style={{ color: currentTheme.colors.text }} className="text-xl font-bold mt-4 drop-shadow-lg">No Stories Yet</Text>
+                <Text style={{ color: currentTheme.colors.textSecondary }} className="text-center mt-2 px-4 text-base">
+                  Stories from your friends will appear here when they share them
+                </Text>
+                <TouchableOpacity
+                  onPress={navigateToCamera}
+                  style={{ backgroundColor: currentTheme.colors.primary }}
+                  className="rounded-2xl px-6 py-3 mt-6"
+                >
+                  <Text style={{ color: currentTheme.colors.background }} className="font-bold text-base">📸 Create Story</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </View>
 
@@ -431,300 +326,6 @@ export default function HomeScreen({ navigation }) {
           visible={showUserSwitcher}
           onClose={() => setShowUserSwitcher(false)}
         />
-
-        {/* Friend Search Modal */}
-        <Modal
-          visible={showFriendSearch}
-          transparent={false}
-          animationType="slide"
-          onRequestClose={() => setShowFriendSearch(false)}
-        >
-          <View style={{
-            flex: 1,
-            backgroundColor: currentTheme.colors.background,
-            paddingTop: 60, // Add top padding to move content higher
-          }}>
-            <View style={{
-              flex: 1,
-              backgroundColor: currentTheme.colors.background,
-              borderRadius: 20,
-              padding: 20,
-              borderWidth: 3,
-              borderColor: currentTheme.colors.snapYellow,
-              shadowColor: currentTheme.colors.snapYellow,
-              shadowOffset: { width: 0, height: -8 },
-              shadowOpacity: 0.4,
-              shadowRadius: 16,
-              elevation: 16,
-              margin: 10,
-            }}>
-              {/* Header */}
-              <View style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: 20,
-                paddingBottom: 16,
-                borderBottomWidth: 2,
-                borderBottomColor: currentTheme.colors.borderStrong,
-              }}>
-                <Text style={{
-                  fontSize: 20,
-                  fontWeight: 'bold',
-                  color: currentTheme.colors.text,
-                }}>
-                  Find Friends
-                </Text>
-                <TouchableOpacity 
-                  onPress={() => {
-                    console.log('🏠 HomeScreen: Friend search modal closed');
-                    setShowFriendSearch(false);
-                  }}
-                  style={{
-                    padding: 8,
-                    borderRadius: 20,
-                    backgroundColor: currentTheme.colors.error,
-                    borderWidth: 2,
-                    borderColor: currentTheme.colors.snapPink,
-                  }}
-                >
-                  <Ionicons name="close" size={24} color={currentTheme.colors.textInverse} />
-                </TouchableOpacity>
-              </View>
-
-              {/* Search Input */}
-              <View style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                marginBottom: 20,
-              }}>
-                <View style={{
-                  flex: 1,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  backgroundColor: currentTheme.colors.surface,
-                  borderRadius: 15,
-                  borderWidth: 2,
-                  borderColor: currentTheme.colors.borderStrong,
-                  paddingHorizontal: 16,
-                  paddingVertical: 12,
-                  marginRight: 12,
-                  shadowColor: currentTheme.colors.shadow,
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 8,
-                  elevation: 6,
-                }}>
-                  <Ionicons 
-                    name="search" 
-                    size={20} 
-                    color={currentTheme.colors.textSecondary} 
-                    style={{ marginRight: 12 }}
-                  />
-                  <TextInput
-                    value={searchQuery}
-                    onChangeText={(text) => {
-                      console.log('🏠 HomeScreen: Search query changed:', text);
-                      setSearchQuery(text);
-                    }}
-                    placeholder="Search by username or email..."
-                    placeholderTextColor={currentTheme.colors.textTertiary}
-                    style={{
-                      flex: 1,
-                      fontSize: 16,
-                      color: currentTheme.colors.text,
-                    }}
-                    onSubmitEditing={() => {
-                      console.log('🏠 HomeScreen: Search submitted');
-                      handleSearch();
-                    }}
-                    returnKeyType="search"
-                    autoFocus={true}
-                  />
-                </View>
-                
-                <TouchableOpacity
-                  onPress={() => {
-                    console.log('🏠 HomeScreen: Search button pressed');
-                    handleSearch();
-                  }}
-                  disabled={loading || !searchQuery.trim()}
-                  style={{
-                    backgroundColor: currentTheme.colors.snapYellow,
-                    borderWidth: 2,
-                    borderColor: currentTheme.colors.snapPink,
-                    borderRadius: 15,
-                    paddingHorizontal: 20,
-                    paddingVertical: 12,
-                    opacity: (loading || !searchQuery.trim()) ? 0.5 : 1,
-                    shadowColor: currentTheme.colors.snapYellow,
-                    shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.4,
-                    shadowRadius: 8,
-                    elevation: 8,
-                  }}
-                >
-                  <Text style={{
-                    color: currentTheme.colors.textInverse,
-                    fontWeight: 'bold',
-                    fontSize: 16,
-                  }}>
-                    {loading ? 'Searching...' : 'Search'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Search Results */}
-              <FlatList
-                data={searchResults}
-                keyExtractor={(item) => item.id}
-                showsVerticalScrollIndicator={false}
-                style={{ flex: 1 }}
-                renderItem={({ item }) => (
-                  <View style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    padding: 16,
-                    backgroundColor: currentTheme.colors.surface,
-                    marginVertical: 4,
-                    borderRadius: 15,
-                    borderWidth: 2,
-                    borderColor: currentTheme.colors.borderStrong,
-                    shadowColor: currentTheme.colors.shadow,
-                    shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.3,
-                    shadowRadius: 8,
-                    elevation: 6,
-                  }}>
-                    <View style={{
-                      width: 50,
-                      height: 50,
-                      borderRadius: 25,
-                      backgroundColor: currentTheme.colors.snapPink,
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      marginRight: 12,
-                      borderWidth: 2,
-                      borderColor: currentTheme.colors.snapYellow,
-                    }}>
-                      <Text style={{
-                        fontSize: 18,
-                        fontWeight: 'bold',
-                        color: currentTheme.colors.textInverse,
-                      }}>
-                        {item.displayName?.charAt(0)?.toUpperCase() || item.username?.charAt(0)?.toUpperCase() || '?'}
-                      </Text>
-                    </View>
-                    
-                    <View style={{ flex: 1 }}>
-                      <Text style={{
-                        fontSize: 16,
-                        fontWeight: 'bold',
-                        color: currentTheme.colors.text,
-                        marginBottom: 2,
-                      }}>
-                        {item.displayName || item.username}
-                      </Text>
-                      <Text style={{
-                        fontSize: 14,
-                        color: currentTheme.colors.textSecondary,
-                      }}>
-                        @{item.username}
-                      </Text>
-                    </View>
-                    
-                    <View style={{ flexDirection: 'row', gap: 8 }}>
-                      <TouchableOpacity
-                        onPress={() => {
-                          console.log('🏠 HomeScreen: Sending friend request to:', item.username);
-                          handleSendFriendRequest(item);
-                        }}
-                        style={{
-                          backgroundColor: currentTheme.colors.snapYellow,
-                          borderWidth: 2,
-                          borderColor: currentTheme.colors.snapPink,
-                          borderRadius: 12,
-                          paddingHorizontal: 12,
-                          paddingVertical: 6,
-                          shadowColor: currentTheme.colors.snapYellow,
-                          shadowOffset: { width: 0, height: 2 },
-                          shadowOpacity: 0.3,
-                          shadowRadius: 4,
-                          elevation: 4,
-                        }}
-                      >
-                        <Text style={{
-                          color: currentTheme.colors.textInverse,
-                          fontWeight: 'bold',
-                          fontSize: 12,
-                        }}>
-                          Add Friend
-                        </Text>
-                      </TouchableOpacity>
-                      
-                      <TouchableOpacity
-                        onPress={() => {
-                          console.log('🏠 HomeScreen: Opening chat with:', item.username);
-                          handleSendMessage(item);
-                        }}
-                        style={{
-                          backgroundColor: currentTheme.colors.snapPink,
-                          borderWidth: 2,
-                          borderColor: currentTheme.colors.snapYellow,
-                          borderRadius: 12,
-                          paddingHorizontal: 12,
-                          paddingVertical: 6,
-                          shadowColor: currentTheme.colors.snapPink,
-                          shadowOffset: { width: 0, height: 2 },
-                          shadowOpacity: 0.3,
-                          shadowRadius: 4,
-                          elevation: 4,
-                        }}
-                      >
-                        <Text style={{
-                          color: currentTheme.colors.textInverse,
-                          fontWeight: 'bold',
-                          fontSize: 12,
-                        }}>
-                          Message
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-                ListEmptyComponent={
-                  searchQuery.trim() ? (
-                    <View style={{
-                      padding: 40,
-                      alignItems: 'center',
-                    }}>
-                      <Text style={{
-                        fontSize: 16,
-                        color: currentTheme.colors.textSecondary,
-                        textAlign: 'center',
-                      }}>
-                        No users found for "{searchQuery}"
-                      </Text>
-                    </View>
-                  ) : (
-                    <View style={{
-                      padding: 40,
-                      alignItems: 'center',
-                    }}>
-                      <Text style={{
-                        fontSize: 16,
-                        color: currentTheme.colors.textSecondary,
-                        textAlign: 'center',
-                      }}>
-                        Search for friends by username or email
-                      </Text>
-                    </View>
-                  )
-                }
-              />
-            </View>
-          </View>
-        </Modal>
       </SafeAreaView>
     </LinearGradient>
   );

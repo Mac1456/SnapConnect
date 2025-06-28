@@ -22,9 +22,18 @@ export const useAIStore = create((set, get) => ({
       const userId = user?.uid || user?.id;
 
       if (!userId) {
-        throw new Error('User not authenticated');
+        console.warn('🤖 AIStore: User not authenticated, using fallback captions');
+        const fallbackCaptions = get().getFallbackCaptions(mediaType, mood);
+        set({ 
+          generatedCaptions: fallbackCaptions,
+          loading: false,
+          error: 'User not authenticated'
+        });
+        return fallbackCaptions;
       }
 
+      console.log('🤖 AIStore: Calling caption-generator Edge Function...');
+      
       // Call the Supabase Edge Function
       const { data, error } = await supabase.functions.invoke('caption-generator', {
         body: {
@@ -37,27 +46,45 @@ export const useAIStore = create((set, get) => ({
       });
 
       if (error) {
-        console.error('🤖 AIStore: Error from caption generator:', error);
+        console.error('🤖 AIStore: Error from caption generator Edge Function:', error);
+        console.error('🤖 AIStore: Error details:', JSON.stringify(error, null, 2));
+        
+        // Check if it's a function not found error
+        if (error.message?.includes('Function not found') || error.message?.includes('404')) {
+          console.warn('🤖 AIStore: Caption generator function not deployed, using fallback captions');
+        } else if (error.message?.includes('OPENAI_API_KEY')) {
+          console.warn('🤖 AIStore: OpenAI API key not configured, using fallback captions');
+        }
+        
         throw error;
       }
 
-      console.log('🤖 AIStore: Generated captions:', data.captions);
+      if (!data || !data.captions || data.captions.length === 0) {
+        console.warn('🤖 AIStore: No captions returned from Edge Function, using fallback');
+        throw new Error('No captions generated');
+      }
+
+      console.log('🤖 AIStore: Successfully generated captions:', data.captions);
       set({ 
-        generatedCaptions: data.captions || [],
-        loading: false 
+        generatedCaptions: data.captions,
+        loading: false,
+        error: null
       });
 
-      return data.captions || [];
+      return data.captions;
 
     } catch (error) {
       console.error('🤖 AIStore: Error generating captions:', error);
+      console.error('🤖 AIStore: Full error object:', JSON.stringify(error, null, 2));
       
-      // Fallback captions based on mood and mediaType
+      // Always provide fallback captions based on mood and mediaType
       const fallbackCaptions = get().getFallbackCaptions(mediaType, mood);
+      
+      console.log('🤖 AIStore: Using fallback captions:', fallbackCaptions);
       
       set({ 
         generatedCaptions: fallbackCaptions,
-        error: error.message,
+        error: `AI service unavailable: ${error.message}`,
         loading: false 
       });
 
@@ -352,28 +379,123 @@ export const useAIStore = create((set, get) => ({
   getFallbackCaptions: (mediaType, mood) => {
     const captionMap = {
       fun: {
-        image: ['📸 Squad moments ✨', 'Living our best life! 🌟', 'Good vibes with the crew 🎉'],
-        video: ['🎬 Making memories! 📹', 'The gang\'s all here! 🎭', 'Epic moments captured 🚀']
+        image: [
+          '📸 Squad moments ✨', 
+          'Living our best life! 🌟', 
+          'Good vibes with the crew 🎉',
+          'Capturing the magic ✨',
+          'Friends who snap together 📷',
+          'Making memories one pic at a time 💫',
+          'Squad goals achieved 🙌',
+          'This is what happiness looks like 😊'
+        ],
+        video: [
+          '🎬 Making memories! 📹', 
+          'The gang\'s all here! 🎭', 
+          'Epic moments captured 🚀',
+          'Action-packed adventures 🎬',
+          'Living in the moment 🎥',
+          'Squad energy is unmatched ⚡',
+          'Good times in motion 🎪',
+          'Creating our own movie 🎬'
+        ]
       },
       casual: {
-        image: ['Just chillin\' 😎', 'Casual moments 📷', 'Simple times together 🤝'],
-        video: ['Random fun 🎥', 'Just hanging out 📱', 'Everyday adventures 🌈']
+        image: [
+          'Just chillin\' 😎', 
+          'Casual moments 📷', 
+          'Simple times together 🤝',
+          'Low-key vibes 🌿',
+          'Everyday magic ✨',
+          'Keeping it real 💯',
+          'Simple pleasures 🌸',
+          'Just us being us 😌'
+        ],
+        video: [
+          'Random fun 🎥', 
+          'Just hanging out 📱', 
+          'Everyday adventures 🌈',
+          'Spontaneous moments 🎬',
+          'Chill mode activated 😎',
+          'Nothing fancy, just fun 🎪',
+          'Regular day, special people 💛',
+          'Casual chaos 🎭'
+        ]
       },
       exciting: {
-        image: ['Adventure time! 🚀', 'This is it! ⚡', 'Epic squad energy 💫'],
-        video: ['Action-packed! 🎬', 'Can\'t contain the excitement! 🎆', 'Living the dream! ✨']
+        image: [
+          'Adventure time! 🚀', 
+          'This is it! ⚡', 
+          'Epic squad energy 💫',
+          'Adrenaline rush! 🎢',
+          'Living on the edge 🔥',
+          'Maximum excitement mode 🎆',
+          'Can\'t contain this energy! ⚡',
+          'Pure adrenaline 🚀'
+        ],
+        video: [
+          'Action-packed! 🎬', 
+          'Can\'t contain the excitement! 🎆', 
+          'Living the dream! ✨',
+          'High energy vibes 🔥',
+          'Thrilling moments 🎢',
+          'Adventure mode: ON 🚀',
+          'Heart racing moments 💓',
+          'Pure excitement captured 🎭'
+        ]
       },
       nostalgic: {
-        image: ['Good times 💭', 'Memories in the making 📸', 'These moments matter 💖'],
-        video: ['Time flies 🕰️', 'Capturing the feels 🎥', 'Forever friends 👯']
+        image: [
+          'Good times 💭', 
+          'Memories in the making 📸', 
+          'These moments matter 💖',
+          'Time stands still 🕰️',
+          'Forever friends 👫',
+          'Golden memories ✨',
+          'Precious moments 💎',
+          'Making history together 📚'
+        ],
+        video: [
+          'Time flies 🕰️', 
+          'Capturing the feels 🎥', 
+          'Forever friends 👯',
+          'Moments to remember 💭',
+          'Building our story 📖',
+          'These are the days 🌅',
+          'Memory lane in the making 🛤️',
+          'Timeless friendships 💫'
+        ]
       },
       celebration: {
-        image: ['Celebration time! 🎉', 'Cheers to us! 🥳', 'Making it count! 🎊'],
-        video: ['Party mode ON! 🎬', 'Celebrating life! 🎭', 'Epic celebration! 🎆']
+        image: [
+          'Celebration time! 🎉', 
+          'Cheers to us! 🥳', 
+          'Making it count! 🎊',
+          'Party mode activated 🎪',
+          'Success tastes sweet 🍾',
+          'Victory dance time 💃',
+          'Milestone achieved! 🏆',
+          'Worth celebrating 🎈'
+        ],
+        video: [
+          'Party mode ON! 🎬', 
+          'Celebrating life! 🎭', 
+          'Epic celebration! 🎆',
+          'Dance like nobody\'s watching 💃',
+          'Cheers to good times 🥂',
+          'Celebration vibes 🎪',
+          'Party in motion 🎉',
+          'Living it up! 🎊'
+        ]
       }
     };
 
-    return captionMap[mood]?.[mediaType] || captionMap.fun[mediaType];
+    const moodCaptions = captionMap[mood] || captionMap.fun;
+    const typeCaptions = moodCaptions[mediaType] || moodCaptions.image;
+    
+    // Return 3 random captions from the available options
+    const shuffled = [...typeCaptions].sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, 3);
   },
 
   // Clear generated content
