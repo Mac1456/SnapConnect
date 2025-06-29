@@ -237,125 +237,428 @@ export const useAIStore = create((set, get) => ({
 
   // Get AI-powered recommendations for group members
   getGroupMemberRecommendations: async (groupName, groupInterests, friendIds, forceRefresh = false) => {
-    if (!groupName && (!groupInterests || groupInterests.length === 0)) return;
+    console.log('🤖 AIStore: === GROUP MEMBER RECOMMENDATIONS START ===');
+    console.log('🤖 AIStore: Input parameters:', {
+      groupName: groupName || 'undefined',
+      groupInterests: groupInterests || [],
+      friendIdsCount: friendIds?.length || 0,
+      forceRefresh
+    });
+    
+    // Check user authentication
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    console.log('🤖 AIStore: 🔐 Authentication check:', {
+      hasSession: !!session,
+      sessionError: sessionError,
+      userId: session?.user?.id,
+      userEmail: session?.user?.email
+    });
+    
+    if (!session) {
+      console.log('🤖 AIStore: ❌ No active session found');
+      return [];
+    }
+    
+    if (!groupName && (!groupInterests || groupInterests.length === 0)) {
+      console.log('🤖 AIStore: ❌ Missing required parameters - need groupName or groupInterests');
+      return [];
+    }
+    
+    // Get friends from the friend store
+    const { friends } = useSupabaseFriendStore.getState();
+    console.log('🤖 AIStore: 👥 Friends available:', friends?.length || 0);
+    
+    if (!friends || friends.length === 0) {
+      console.log('🤖 AIStore: ❌ No friends available');
+      return [];
+    }
     
     // If forceRefresh is true, clear previous recommendations first
     if (forceRefresh) {
+      console.log('🤖 AIStore: 🔄 Force refresh requested - clearing previous recommendations');
       set({ groupMemberRecommendations: [], error: null });
     }
     
     try {
-      console.log('🤖 AIStore: Getting group member recommendations for:', { groupName, groupInterests, friendIds: friendIds?.length || 0, forceRefresh });
-      set({ loading: true, error: null });
-
-      const { data, error } = await supabase.functions.invoke('group-member-recommender', {
-        body: { groupName, groupInterests, friendIds, forceRefresh },
+      console.log('🤖 AIStore: 📡 Calling edge function group-member-recommender...');
+      
+      const requestBody = { 
+        groupName: groupName || '', 
+        groupInterests: groupInterests || [], 
+        friendIds: friendIds || [], 
+        forceRefresh 
+      };
+      console.log('🤖 AIStore: 📤 Request body:', requestBody);
+      console.log('🤖 AIStore: 📤 Request body details:', {
+        groupName: requestBody.groupName,
+        groupInterestsCount: requestBody.groupInterests.length,
+        groupInterestsArray: requestBody.groupInterests,
+        friendIdsCount: requestBody.friendIds.length,
+        friendIdsArray: requestBody.friendIds,
+        forceRefresh: requestBody.forceRefresh
       });
 
+      let data, error;
+      try {
+        console.log('🤖 AIStore: 🚀 About to invoke edge function...');
+        
+        // Get the current session to pass auth headers
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        console.log('🤖 AIStore: 🔐 Session for edge function call:', {
+          hasSession: !!session,
+          hasAccessToken: !!session?.access_token,
+          sessionError: sessionError,
+          userId: session?.user?.id
+        });
+        
+        if (!session?.access_token) {
+          console.log('🤖 AIStore: ❌ No access token available for edge function call');
+          throw new Error('No authentication token available');
+        }
+        
+        // Call the edge function with explicit auth headers
+        console.log('🤖 AIStore: 📡 Calling edge function with auth headers...');
+        const response = await supabase.functions.invoke('group-member-recommender', {
+          body: requestBody,
+        });
+        
+        console.log('🤖 AIStore: 🚀 Edge function invocation completed');
+        console.log('🤖 AIStore: 📥 Response status:', response.status);
+        console.log('🤖 AIStore: 📥 Response headers:', response.headers);
+        console.log('🤖 AIStore: 📥 Raw Supabase response:', response);
+        console.log('🤖 AIStore: 📥 Data type:', typeof response.data);
+        console.log('🤖 AIStore: 📥 Error type:', typeof response.error);
+        console.log('🤖 AIStore: 📥 Error details:', response.error);
+
+        // Extract error response body if available
+        if (response.error && response.error.context) {
+          console.log('🤖 AIStore: 📥 Error status:', response.error.context.status);
+          console.log('🤖 AIStore: 📥 Error statusText:', response.error.context.statusText);
+          console.log('🤖 AIStore: 📥 Error headers:', response.error.context.headers);
+          
+          // Try to read the response body
+          if (response.error.context._bodyInit) {
+            try {
+              // Clone the response to read the body
+              const responseClone = response.error.context.clone();
+              const errorBody = await responseClone.text();
+              console.log('🤖 AIStore: 📥 Error response body:', errorBody);
+            } catch (bodyError) {
+              console.log('🤖 AIStore: ❌ Failed to read error body:', bodyError);
+            }
+          }
+        }
+        
+        data = response.data;
+        error = response.error;
+      } catch (invokeError) {
+        console.log('🤖 AIStore: ❌ Edge function invocation threw exception:', invokeError);
+        console.log('🤖 AIStore: ❌ Exception name:', invokeError.name);
+        console.log('🤖 AIStore: ❌ Exception message:', invokeError.message);
+        console.log('🤖 AIStore: ❌ Exception stack:', invokeError.stack);
+        console.log('🤖 AIStore: ❌ Exception details:', JSON.stringify(invokeError, null, 2));
+        throw invokeError;
+      }
+
       if (error) {
-        console.error('🤖 AIStore: Edge Function error:', error);
+        console.log('🤖 AIStore: ❌ Edge Function error:', error);
+        console.log('🤖 AIStore: ❌ Error name:', error?.name);
+        console.log('🤖 AIStore: ❌ Error message:', error?.message);
+        console.log('🤖 AIStore: ❌ Error stack:', error?.stack);
+        console.log('🤖 AIStore: ❌ Error context:', error?.context);
+        console.log('🤖 AIStore: ❌ Full error object:', JSON.stringify(error, null, 2));
         throw error;
       }
+
+      console.log('🤖 AIStore: 📥 Edge function response data:', data);
+      console.log('🤖 AIStore: 📥 Response success field:', data?.success);
+      console.log('🤖 AIStore: 📥 Response message field:', data?.message);
+      console.log('🤖 AIStore: 📥 Response recommendations field:', data?.recommendations);
+      console.log('🤖 AIStore: 📥 Full response JSON:', JSON.stringify(data, null, 2));
 
       if (data && data.success) {
         // Log any message from the AI service
         if (data.message) {
-          console.log('🤖 AIStore: AI service message:', data.message);
+          console.log('🤖 AIStore: 💬 AI service message:', data.message);
         }
 
-        // We need to map the recommended user_ids back to full friend objects
-        const { friends } = useSupabaseFriendStore.getState();
-        const recommendedFriends = (data.recommendations || [])
-          .map(rec => {
-            const friend = friends.find(f => f.id === rec.user_id);
-            return friend ? { ...friend, similarity: rec.total_similarity } : null;
-          })
-          .filter(Boolean); // Filter out any nulls if a friend wasn't found
-
-        console.log('🤖 AIStore: Successfully got', recommendedFriends.length, 'AI recommendations');
-        
-        // If AI returned no recommendations, use fallback
-        if (recommendedFriends.length === 0) {
-          console.log('🤖 AIStore: No AI recommendations, using fallback');
+        // Process the response
+        if (data.success && data.recommendations && data.recommendations.length > 0) {
+          console.log('🤖 AIStore: ✅ Edge function successful, processing recommendations...');
+          console.log('🤖 AIStore: 📊 Raw recommendations:', data.recommendations);
+          
+          // Map the recommendations to our friends list
+          const recommendedFriends = data.recommendations
+            .map(rec => {
+              const friend = friends.find(f => f.id === rec.user_id);
+              if (friend) {
+                return {
+                  ...friend,
+                  similarity: rec.compatibility_score || rec.total_similarity || 0.7,
+                  reason: rec.reason || 'AI recommended based on compatibility'
+                };
+              }
+              return null;
+            })
+            .filter(Boolean)
+            .slice(0, 5);
+          
+          console.log('🤖 AIStore: 🎯 Final recommended friends:', recommendedFriends.map(f => f.display_name));
+          
+          // If AI returned no recommendations, use fallback
+          if (recommendedFriends.length === 0) {
+            console.log('🤖 AIStore: ⚠️ No AI recommendations found, using fallback');
+            const fallbackRecommendations = get().getFallbackMemberRecommendations(
+              groupName, 
+              groupInterests, 
+              friends, 
+              [] // Don't exclude anyone for member recommendations - let user choose
+            );
+            
+            console.log('🤖 AIStore: 🔄 Fallback recommendations:', fallbackRecommendations.map(f => f.display_name));
+            
+            set({ 
+              groupMemberRecommendations: fallbackRecommendations, 
+              error: data.message || 'Using smart recommendations - AI will improve as more content is added',
+              loading: false 
+            });
+            return fallbackRecommendations;
+          } else {
+            // Success with AI recommendations
+            const successMessage = data.message.includes('AI recommendations generated') 
+              ? 'AI recommendations based on user compatibility'
+              : data.message;
+            
+            set({ 
+              groupMemberRecommendations: recommendedFriends, 
+              error: null,
+              loading: false,
+              lastRecommendationSource: 'ai'
+            });
+            
+            console.log('🤖 AIStore: ✅ AI recommendations successful:', successMessage);
+            return recommendedFriends;
+          }
+        } else {
+          // No recommendations from AI, use fallback
+          console.log('🤖 AIStore: ⚠️ No recommendations from edge function, using fallback');
           const fallbackRecommendations = get().getFallbackMemberRecommendations(
             groupName, 
             groupInterests, 
             friends, 
-            friendIds
+            [] // Don't exclude anyone for member recommendations - let user choose
           );
+          
+          console.log('🤖 AIStore: 🔄 Fallback recommendations:', fallbackRecommendations.map(f => f.display_name));
           
           set({ 
             groupMemberRecommendations: fallbackRecommendations, 
-            error: data.message || 'Using fallback recommendations',
-            loading: false 
+            error: data.message || 'Using smart recommendations - AI will improve as more content is added',
+            loading: false,
+            lastRecommendationSource: 'fallback'
           });
           return fallbackRecommendations;
         }
+      } else if (data && data.success === false) {
+        // Edge function explicitly returned success: false
+        console.log('🤖 AIStore: ⚠️ Edge function returned success: false, using fallback');
+        console.log('🤖 AIStore: ⚠️ Edge function message:', data.message);
         
-        set({ groupMemberRecommendations: recommendedFriends, loading: false });
-        return recommendedFriends;
+        const fallbackRecommendations = get().getFallbackMemberRecommendations(
+          groupName, 
+          groupInterests, 
+          friends, 
+          [] // Don't exclude anyone for member recommendations - let user choose
+        );
+        
+        console.log('🤖 AIStore: 🔄 Fallback recommendations:', fallbackRecommendations.map(f => f.display_name));
+        
+        set({ 
+          groupMemberRecommendations: fallbackRecommendations, 
+          error: data.message || 'AI recommendations temporarily unavailable',
+          loading: false,
+          lastRecommendationSource: 'fallback'
+        });
+        
+        console.log('🤖 AIStore: === GROUP MEMBER RECOMMENDATIONS END (FALLBACK) ===');
+        return fallbackRecommendations;
       } else {
-        throw new Error(data?.error || 'Failed to get group member recommendations.');
+        console.error('🤖 AIStore: ❌ Edge function returned unexpected response format:', data);
+        throw new Error(data?.error || data?.message || 'Failed to get group member recommendations from AI service.');
       }
     } catch (error) {
-      console.error('🤖 AIStore: Error getting group member recommendations:', error);
+      console.error('🤖 AIStore: ❌ Error in getGroupMemberRecommendations:', error);
+      console.error('🤖 AIStore: ❌ Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
       
       // Fallback: provide simple recommendations based on available friends
+      console.log('🤖 AIStore: 🔄 Initiating fallback recommendations...');
       const { friends } = useSupabaseFriendStore.getState();
+      console.log('🤖 AIStore: 👥 Friends available for fallback:', friends?.length || 0);
+      
+      if (!friends || friends.length === 0) {
+        console.error('🤖 AIStore: ❌ No friends available for fallback recommendations');
+        set({ 
+          groupMemberRecommendations: [], 
+          error: `No friends available: ${error.message}`, 
+          loading: false 
+        });
+        return [];
+      }
+      
       const fallbackRecommendations = get().getFallbackMemberRecommendations(
         groupName, 
         groupInterests, 
         friends, 
-        friendIds
+        [] // Don't exclude anyone for member recommendations - let user choose
       );
       
-      console.log('🤖 AIStore: Using fallback recommendations:', fallbackRecommendations.length);
+      console.log('🤖 AIStore: 🔄 Fallback recommendations generated:', fallbackRecommendations.map(f => f.display_name));
       set({ 
         groupMemberRecommendations: fallbackRecommendations, 
         error: `AI recommendations unavailable: ${error.message}`, 
         loading: false 
       });
       
+      console.log('🤖 AIStore: === GROUP MEMBER RECOMMENDATIONS END (FALLBACK) ===');
       return fallbackRecommendations;
+    } finally {
+      console.log('🤖 AIStore: === GROUP MEMBER RECOMMENDATIONS END ===');
     }
   },
 
   // Fallback member recommendations when AI is unavailable
   getFallbackMemberRecommendations: (groupName, groupInterests, allFriends, excludedIds = []) => {
-    if (!allFriends || allFriends.length === 0) return [];
+    console.log('🤖 AIStore: === FALLBACK MEMBER RECOMMENDATIONS START ===');
+    console.log('🤖 AIStore: Fallback input:', {
+      groupName: groupName || 'undefined',
+      groupInterests: groupInterests || [],
+      allFriendsCount: allFriends?.length || 0,
+      excludedIdsCount: excludedIds?.length || 0,
+      excludedIds: excludedIds
+    });
     
-    // Filter out already selected friends
-    const availableFriends = allFriends.filter(friend => !excludedIds.includes(friend.id));
+    if (!allFriends || allFriends.length === 0) {
+      console.log('🤖 AIStore: ❌ No friends available for fallback');
+      return [];
+    }
     
-    // If we have group interests, try to match friends based on username/display name
+    // Filter out already selected friends (but NOT the current user - they should be in the group)
+    const { user } = useSupabaseAuthStore.getState();
+    const currentUserId = user?.id || user?.uid;
+    
+    const availableFriends = allFriends.filter(friend => {
+      const isExcluded = excludedIds.includes(friend.id);
+      const isValid = friend.id && (friend.display_name || friend.username);
+      
+      if (!isValid) {
+        console.warn('🤖 AIStore: ⚠️ Invalid friend data:', friend);
+        return false;
+      }
+      
+      // Don't exclude current user - they can be part of the group
+      // Only exclude friends that are explicitly in excludedIds
+      const shouldInclude = !isExcluded;
+      
+      if (!shouldInclude) {
+        console.log('🤖 AIStore: 🚫 Excluding friend:', friend.display_name || friend.username, 'reason: already selected');
+      }
+      
+      return shouldInclude;
+    });
+    
+    console.log('🤖 AIStore: 👥 Available friends for fallback:', availableFriends.length);
+    console.log('🤖 AIStore: 👥 Available friend names:', availableFriends.map(f => f.display_name || f.username));
+    
+    if (availableFriends.length === 0) {
+      console.log('🤖 AIStore: ❌ No available friends after filtering');
+      return [];
+    }
+    
+    // Strategy 1: If we have group interests, try to match friends based on username/display name
     if (groupInterests && groupInterests.length > 0) {
+      console.log('🤖 AIStore: 🔍 Trying to match friends based on interests:', groupInterests);
       const interestKeywords = groupInterests.map(interest => interest.toLowerCase());
       const matchedFriends = availableFriends.filter(friend => {
-        const friendText = `${friend.username} ${friend.display_name}`.toLowerCase();
-        return interestKeywords.some(keyword => friendText.includes(keyword));
+        const friendText = `${friend.username || ''} ${friend.display_name || ''}`.toLowerCase();
+        const hasMatch = interestKeywords.some(keyword => 
+          friendText.includes(keyword) || keyword.includes(friendText.split(' ')[0])
+        );
+        if (hasMatch) {
+          console.log('🤖 AIStore: ✅ Interest match found:', friend.display_name || friend.username, 'for keywords:', interestKeywords);
+        }
+        return hasMatch;
       });
       
       if (matchedFriends.length > 0) {
-        return matchedFriends.slice(0, 3).map(friend => ({ ...friend, similarity: 0.8 }));
+        const result = matchedFriends.slice(0, 3).map(friend => ({ ...friend, similarity: 0.8 }));
+        console.log('🤖 AIStore: 🎯 Interest-based recommendations:', result.map(f => f.display_name || f.username));
+        return result;
       }
     }
     
-    // If group name contains keywords, try to match
-    if (groupName) {
-      const nameKeywords = groupName.toLowerCase().split(' ');
-      const matchedFriends = availableFriends.filter(friend => {
-        const friendText = `${friend.username} ${friend.display_name}`.toLowerCase();
-        return nameKeywords.some(keyword => keyword.length > 2 && friendText.includes(keyword));
-      });
+    // Strategy 2: If group name contains keywords, try to match
+    if (groupName && groupName.trim()) {
+      console.log('🤖 AIStore: 🔍 Trying to match friends based on group name:', groupName);
+      const nameKeywords = groupName.toLowerCase().split(/[\s\-_]+/).filter(word => word.length > 2);
+      console.log('🤖 AIStore: 🔍 Name keywords:', nameKeywords);
       
-      if (matchedFriends.length > 0) {
-        return matchedFriends.slice(0, 3).map(friend => ({ ...friend, similarity: 0.7 }));
+      if (nameKeywords.length > 0) {
+        const matchedFriends = availableFriends.filter(friend => {
+          const friendText = `${friend.username || ''} ${friend.display_name || ''}`.toLowerCase();
+          const hasMatch = nameKeywords.some(keyword => 
+            friendText.includes(keyword) || keyword.includes(friendText.split(' ')[0])
+          );
+          if (hasMatch) {
+            console.log('🤖 AIStore: ✅ Name match found:', friend.display_name || friend.username, 'for keywords:', nameKeywords);
+          }
+          return hasMatch;
+        });
+        
+        if (matchedFriends.length > 0) {
+          const result = matchedFriends.slice(0, 3).map(friend => ({ ...friend, similarity: 0.7 }));
+          console.log('🤖 AIStore: 🎯 Name-based recommendations:', result.map(f => f.display_name || f.username));
+          return result;
+        }
       }
     }
     
-    // Random fallback - suggest up to 2 random friends
-    const shuffled = [...availableFriends].sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, 2).map(friend => ({ ...friend, similarity: 0.5 }));
+    // Strategy 3: Smart fallback - prefer friends with more complete profiles or recent activity
+    console.log('🤖 AIStore: 🧠 Using smart fallback recommendations');
+    const scoredFriends = availableFriends.map(friend => {
+      let score = 0.4; // Base score (lowered to be more inclusive)
+      
+      // Bonus for having profile picture
+      if (friend.profile_picture) score += 0.15;
+      
+      // Bonus for having both username and display name
+      if (friend.username && friend.display_name && friend.username !== friend.display_name) score += 0.1;
+      
+      // Bonus for longer display names (more likely to be real names)
+      if (friend.display_name && friend.display_name.length > 5) score += 0.1;
+      
+      // Bonus for having email (more complete profile)
+      if (friend.email) score += 0.05;
+      
+      // Small random factor for variety (increased for more diversity)
+      score += Math.random() * 0.3;
+      
+      return { ...friend, similarity: score };
+    });
+    
+    // Sort by score and take top friends (increased to up to 4 friends)
+    const sortedFriends = scoredFriends.sort((a, b) => b.similarity - a.similarity);
+    const result = sortedFriends.slice(0, Math.min(4, availableFriends.length));
+    
+    console.log('🤖 AIStore: 🎯 Smart fallback recommendations:', result.map(f => ({ 
+      name: f.display_name || f.username, 
+      similarity: f.similarity.toFixed(2) 
+    })));
+    console.log('🤖 AIStore: === FALLBACK MEMBER RECOMMENDATIONS END ===');
+    return result;
   },
 
   // Fallback group details suggestions when AI is unavailable

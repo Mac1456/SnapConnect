@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,206 @@ import { useThemeStore } from '../stores/themeStore';
 import { supabase } from '../../supabase.config';
 import { useTheme } from '@react-navigation/native';
 
+const createStyles = (colors, isDarkMode) => StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: isDarkMode ? '#000000' : colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: colors.text,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: isDarkMode ? '#333333' : colors.border,
+    backgroundColor: isDarkMode ? '#1C1C1E' : colors.card,
+  },
+  headerInfo: {
+    flex: 1,
+    marginLeft: 16,
+  },
+  headerAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: 12,
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: isDarkMode ? '#FFFFFF' : colors.text,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: isDarkMode ? '#AAAAAA' : colors.text + '80',
+    marginTop: 2,
+  },
+  headerButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  messageList: {
+    flex: 1,
+    backgroundColor: isDarkMode ? '#000000' : colors.background,
+  },
+  messageListContent: {
+    paddingVertical: 8,
+  },
+  messageContainer: {
+    marginVertical: 2,
+    paddingHorizontal: 16,
+  },
+  messageBubble: {
+    padding: 12,
+    borderRadius: 16,
+    maxWidth: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  myMessage: {
+    backgroundColor: '#FFD700',
+    alignSelf: 'flex-end',
+    borderBottomRightRadius: 4,
+    borderWidth: 2,
+    borderColor: '#FF69B4',
+  },
+  theirMessage: {
+    backgroundColor: isDarkMode ? '#2C2C2E' : '#F0F0F0',
+    alignSelf: 'flex-start',
+    borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: isDarkMode ? '#3C3C3E' : '#E0E0E0',
+  },
+  messageText: {
+    fontSize: 16,
+    color: '#000000',
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  theirMessageText: {
+    color: isDarkMode ? '#FFFFFF' : '#000000',
+  },
+  messageFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  timestamp: {
+    fontSize: 11,
+    color: '#000000',
+    opacity: 0.7,
+  },
+  theirTimestamp: {
+    color: isDarkMode ? '#AAAAAA' : '#666666',
+  },
+  ephemeralIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  timerText: {
+    fontSize: 10,
+    color: '#000000',
+    marginLeft: 2,
+    fontWeight: '600',
+  },
+  theirTimerText: {
+    color: isDarkMode ? '#AAAAAA' : '#666666',
+  },
+  ephemeralControls: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: isDarkMode ? '#444444' : colors.border,
+    backgroundColor: isDarkMode ? '#2C2C2E' : colors.card,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: isDarkMode ? 0.3 : 0.1,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  ephemeralToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ephemeralLabel: {
+    fontSize: 14,
+    marginHorizontal: 8,
+  },
+  timerSelector: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 8,
+    gap: 8,
+  },
+  timerButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  timerButtonText: {
+    fontSize: 12,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: isDarkMode ? '#1C1C1E' : colors.background,
+    borderTopWidth: 1,
+    borderTopColor: isDarkMode ? '#333333' : colors.border,
+  },
+  attachButton: {
+    padding: 8,
+    marginRight: 8,
+    borderRadius: 20,
+    backgroundColor: colors.card,
+  },
+  input: {
+    flex: 1,
+    minHeight: 40,
+    maxHeight: 100,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: isDarkMode ? '#2C2C2E' : colors.card,
+    color: isDarkMode ? '#FFFFFF' : colors.text,
+    fontSize: 16,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: isDarkMode ? '#3C3C3E' : colors.border,
+  },
+  sendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFD700',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FF69B4',
+  },
+  disabledSendButton: {
+    backgroundColor: colors.textTertiary,
+    borderColor: colors.textTertiary,
+  },
+});
+
 const ChatScreen = ({ navigation, route }) => {
   const { recipientId, recipientUsername, recipientName, isGroup = false, groupName = null } = route.params;
   const [messages, setMessages] = useState([]);
@@ -35,7 +235,12 @@ const ChatScreen = ({ navigation, route }) => {
   const { user } = useAuthStore();
   const { colors } = useTheme();
   const { isDarkMode } = useThemeStore();
-  const styles = createStyles(colors || {}, isDarkMode);
+  
+  // Ensure colors is available before creating styles
+  const styles = useMemo(() => {
+    if (!colors) return {};
+    return createStyles(colors, isDarkMode);
+  }, [colors, isDarkMode]);
 
   const currentUserId = user?.uid || user?.id || user?.userId;
   
@@ -405,228 +610,5 @@ const ChatScreen = ({ navigation, route }) => {
     </SafeAreaView>
   );
 };
-
-const createStyles = (colors, isDarkMode) => StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: isDarkMode ? '#000000' : colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: colors.text,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: isDarkMode ? '#333333' : colors.border,
-    backgroundColor: isDarkMode ? '#1C1C1E' : colors.card,
-  },
-  headerInfo: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 16,
-  },
-  headerAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    marginRight: 12,
-  },
-  headerTextContainer: {
-    flex: 1,
-  },
-  headerButton: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
-  },
-  headerInfo: {
-    flex: 1,
-    marginLeft: 16,
-  },
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: isDarkMode ? '#FFFFFF' : colors.text,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: isDarkMode ? '#AAAAAA' : colors.text + '80',
-    marginTop: 2,
-  },
-  headerButton: {
-    padding: 8,
-    marginLeft: 8,
-  },
-  messageList: {
-    flex: 1,
-    backgroundColor: isDarkMode ? '#000000' : colors.background,
-  },
-  messageListContent: {
-    paddingVertical: 8,
-  },
-  messageContainer: {
-    marginVertical: 2,
-    paddingHorizontal: 16,
-  },
-  messageBubble: {
-    padding: 12,
-    borderRadius: 16,
-    maxWidth: '80%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  myMessage: {
-    backgroundColor: '#FFD700',
-    alignSelf: 'flex-end',
-    borderBottomRightRadius: 4,
-    borderWidth: 2,
-    borderColor: '#FF69B4',
-  },
-  theirMessage: {
-    backgroundColor: isDarkMode ? '#2C2C2E' : '#F0F0F0',
-    alignSelf: 'flex-start',
-    borderBottomLeftRadius: 4,
-    borderWidth: 1,
-    borderColor: isDarkMode ? '#3C3C3E' : '#E0E0E0',
-  },
-  messageText: {
-    fontSize: 16,
-    color: '#000000',
-    lineHeight: 20,
-    fontWeight: '500',
-  },
-  theirMessageText: {
-    color: isDarkMode ? '#FFFFFF' : '#000000',
-  },
-  messageFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 4,
-  },
-  timestamp: {
-    fontSize: 11,
-    color: '#000000',
-    opacity: 0.7,
-  },
-  theirTimestamp: {
-    color: isDarkMode ? '#AAAAAA' : '#666666',
-  },
-  ephemeralIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  timerText: {
-    fontSize: 10,
-    color: '#000000',
-    marginLeft: 2,
-    fontWeight: '600',
-  },
-  theirTimerText: {
-    color: isDarkMode ? '#AAAAAA' : '#666666',
-  },
-  ephemeralControls: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: isDarkMode ? '#444444' : colors.border,
-    backgroundColor: isDarkMode ? '#2C2C2E' : colors.card,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: isDarkMode ? 0.3 : 0.1,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  ephemeralToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ephemeralLabel: {
-    fontSize: 14,
-    marginHorizontal: 8,
-  },
-  timerSelector: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 8,
-    gap: 8,
-  },
-  timerButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  timerButtonText: {
-    fontSize: 12,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: isDarkMode ? '#1C1C1E' : colors.background,
-    borderTopWidth: 1,
-    borderTopColor: isDarkMode ? '#333333' : colors.border,
-  },
-  attachButton: {
-    padding: 8,
-    marginRight: 8,
-    borderRadius: 20,
-    backgroundColor: colors.card,
-  },
-  input: {
-    flex: 1,
-    minHeight: 40,
-    maxHeight: 100,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: isDarkMode ? '#2C2C2E' : colors.card,
-    color: isDarkMode ? '#FFFFFF' : colors.text,
-    fontSize: 16,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: isDarkMode ? '#3C3C3E' : colors.border,
-  },
-  sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FF69B4',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  disabledSendButton: {
-    backgroundColor: colors.border,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 64,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: colors.text + '60',
-    textAlign: 'center',
-    marginTop: 16,
-  },
-});
 
 export default ChatScreen; 

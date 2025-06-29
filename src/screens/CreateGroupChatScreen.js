@@ -15,7 +15,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '@react-navigation/native';
 
 import { useSupabaseAuthStore as useAuthStore } from '../stores/supabaseAuthStore';
@@ -288,7 +288,10 @@ const CreateGroupChatScreen = () => {
   const navigation = useNavigation();
   const { colors } = useTheme();
   const { isDarkMode, currentTheme } = useThemeStore();
-  const styles = createStyles(currentTheme.colors, isDarkMode);
+  const styles = useMemo(() => {
+    if (!currentTheme?.colors) return {};
+    return createStyles(currentTheme.colors, isDarkMode);
+  }, [currentTheme, isDarkMode]);
 
   console.log('🏗️ CreateGroupChatScreen: Component initialized');
 
@@ -305,6 +308,7 @@ const CreateGroupChatScreen = () => {
     groupMemberRecommendations,
     loading: aiLoading,
     error: aiError,
+    lastRecommendationSource,
   } = useAIStore();
 
   // Component State
@@ -338,11 +342,52 @@ const CreateGroupChatScreen = () => {
   // Update recommended friends when AI suggestions are available
   useEffect(() => {
     if (groupMemberRecommendations && groupMemberRecommendations.length > 0) {
-      console.log('🤖 CreateGroupChatScreen: AI recommended members:', groupMemberRecommendations.map(f => f.display_name));
-      const newSelectedFriendIds = new Set([...selectedFriendIds, ...groupMemberRecommendations.map(f => f.id)]);
-      setSelectedFriendIds(newSelectedFriendIds);
+      console.log('🤖 CreateGroupChatScreen: === PROCESSING AI RECOMMENDATIONS ===');
+      console.log('🤖 CreateGroupChatScreen: AI recommended members:', groupMemberRecommendations.map(f => ({ id: f.id, name: f.display_name, similarity: f.similarity })));
+      console.log('🤖 CreateGroupChatScreen: Current selected friend IDs:', Array.from(selectedFriendIds));
+      
+      // Only auto-select if we don't have any friends selected yet, or if this is a force refresh
+      const shouldAutoSelect = selectedFriendIds.size === 0 || hasGeneratedMemberSuggestions;
+      
+      if (shouldAutoSelect) {
+        const recommendedIds = groupMemberRecommendations.map(f => f.id).filter(id => id); // Filter out any undefined IDs
+        const newSelectedFriendIds = new Set([...selectedFriendIds, ...recommendedIds]);
+        
+        console.log('🤖 CreateGroupChatScreen: Auto-selecting recommended friends:', recommendedIds);
+        console.log('🤖 CreateGroupChatScreen: New selected friend IDs:', Array.from(newSelectedFriendIds));
+        
+        setSelectedFriendIds(newSelectedFriendIds);
+      } else {
+        console.log('🤖 CreateGroupChatScreen: Not auto-selecting - friends already selected');
+      }
+      
+      console.log('🤖 CreateGroupChatScreen: === AI RECOMMENDATIONS PROCESSED ===');
     }
-  }, [groupMemberRecommendations]);
+  }, [groupMemberRecommendations, hasGeneratedMemberSuggestions]);
+
+  // Reset form when screen loses focus (user navigates away)
+  useFocusEffect(
+    React.useCallback(() => {
+      // This runs when the screen comes into focus
+      console.log('🏗️ CreateGroupChatScreen: Screen focused');
+      
+      return () => {
+        // This runs when the screen loses focus (cleanup)
+        console.log('🏗️ CreateGroupChatScreen: Screen losing focus - clearing form data');
+        setGroupName('');
+        setGroupDescription('');
+        setInterestInput('');
+        setGroupInterests([]);
+        setSelectedFriendIds(new Set());
+        setSearchQuery('');
+        setHasGeneratedDetailsSuggestions(false);
+        setHasGeneratedMemberSuggestions(false);
+        
+        // Clear AI recommendations
+        clearGroupRecommendations();
+      };
+    }, [clearGroupRecommendations])
+  );
 
   const handleCreateGroup = async () => {
     const validMemberIds = [...selectedFriendIds].filter(id => id);
@@ -378,8 +423,11 @@ const CreateGroupChatScreen = () => {
         // Clear AI recommendations
         clearGroupRecommendations();
         
-        // Navigate to Chats screen first, then to the new group chat
-        navigation.navigate('Chats');
+        // Navigate back to the main tabs
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'MainTabs' }],
+        });
         
         // Small delay to ensure navigation completes, then navigate to the group chat
         setTimeout(() => {
@@ -444,13 +492,20 @@ const CreateGroupChatScreen = () => {
     console.log('🤖 CreateGroupChatScreen: Getting member recommendations with:', {
       groupName,
       groupInterests,
-      friendsCount: friends.length
+      friendsCount: friends?.length || 0
     });
 
     if (!groupName && groupInterests.length === 0) {
       return Alert.alert(
         'Missing Information',
         'Please enter a group name or some interests to get member recommendations.'
+      );
+    }
+    
+    if (!friends || friends.length === 0) {
+      return Alert.alert(
+        'No Friends Available',
+        'You need to add some friends first to get member recommendations.'
       );
     }
     
@@ -461,40 +516,122 @@ const CreateGroupChatScreen = () => {
   const handleGetMemberRecommendationsWithFeedback = async () => {
     const forceRefresh = hasGeneratedMemberSuggestions; // Force refresh if we've already generated suggestions
     
-    console.log('🤖 CreateGroupChatScreen: Getting member recommendations with:', {
-      groupName,
-      groupInterests,
-      friendsCount: friends.length,
-      forceRefresh
+    console.log('🤖 CreateGroupChatScreen: === MEMBER RECOMMENDATIONS REQUEST START ===');
+    console.log('🤖 CreateGroupChatScreen: Request parameters:', {
+      groupName: groupName || 'undefined',
+      groupInterests: groupInterests || [],
+      friendsCount: friends?.length || 0,
+      friendIds: friends?.map(f => f.id) || [],
+      selectedFriendIds: Array.from(selectedFriendIds),
+      forceRefresh,
+      hasGeneratedMemberSuggestions
     });
 
     if (!groupName && groupInterests.length === 0) {
+      console.log('🤖 CreateGroupChatScreen: ❌ Missing required information');
       return Alert.alert(
         'Missing Information',
         'Please enter a group name or some interests to get member recommendations.'
       );
     }
     
-    const friendIds = friends.map(f => f.id);
-    const result = await getGroupMemberRecommendations(groupName, groupInterests, friendIds, forceRefresh);
+    if (!friends || friends.length === 0) {
+      console.log('🤖 CreateGroupChatScreen: ❌ No friends available');
+      return Alert.alert(
+        'No Friends Available',
+        'You need to add some friends first to get member recommendations.'
+      );
+    }
     
-    setHasGeneratedMemberSuggestions(true);
-    
-    // Show feedback if using fallback recommendations
-    if (aiError && result && result.length > 0) {
+    try {
+      if (!friends || friends.length === 0) {
+        throw new Error('No friends available');
+      }
+      
+      const friendIds = friends.map(f => f.id);
+      
+      // Include current user in the friend list for AI analysis (they will be part of the group)
+      const { user } = useAuthStore.getState();
+      const currentUserId = user?.id || user?.uid;
+      if (currentUserId && !friendIds.includes(currentUserId)) {
+        friendIds.push(currentUserId);
+        console.log('🤖 CreateGroupChatScreen: 👤 Added current user to analysis:', currentUserId);
+      }
+      
+      console.log('🤖 CreateGroupChatScreen: 📡 Calling getGroupMemberRecommendations...');
+      
+      const result = await getGroupMemberRecommendations(groupName, groupInterests, friendIds, forceRefresh);
+      
+      console.log('🤖 CreateGroupChatScreen: 📥 Recommendations result:', {
+        resultCount: result?.length || 0,
+        resultNames: result?.map(f => f.display_name || f.username) || [],
+        aiError: aiError || 'none'
+      });
+      
+      setHasGeneratedMemberSuggestions(true);
+      
+      // Auto-select recommended friends if this is the first time generating suggestions
+      if (result && result.length > 0 && !forceRefresh) {
+        const newSelectedIds = new Set(selectedFriendIds);
+        let autoSelectedCount = 0;
+        
+        result.forEach(recommendedFriend => {
+          // Only auto-select if not already selected and we haven't selected too many
+          if (!newSelectedIds.has(recommendedFriend.id) && autoSelectedCount < 2) {
+            newSelectedIds.add(recommendedFriend.id);
+            autoSelectedCount++;
+            console.log('🤖 CreateGroupChatScreen: 🎯 Auto-selected recommended friend:', recommendedFriend.display_name || recommendedFriend.username);
+          }
+        });
+        
+        if (autoSelectedCount > 0) {
+          setSelectedFriendIds(newSelectedIds);
+          console.log('🤖 CreateGroupChatScreen: ✅ Auto-selected', autoSelectedCount, 'recommended friends');
+        }
+      }
+      
+      // Show feedback based on result
+      if (result && result.length > 0) {
+        if (lastRecommendationSource === 'fallback') {
+          console.log('🤖 CreateGroupChatScreen: ⚠️ Using fallback recommendations');
+          Alert.alert(
+            forceRefresh ? 'New Recommendations Ready' : 'Recommendations Ready',
+            'AI recommendations are temporarily unavailable, but we found some friends who might be interested based on their activity!',
+            [{ text: 'OK' }]
+          );
+        } else {
+          console.log('🤖 CreateGroupChatScreen: ✅ AI recommendations successful');
+          Alert.alert(
+            forceRefresh ? 'New AI Recommendations Ready' : 'AI Recommendations Ready',
+            `Found ${result.length} friend${result.length === 1 ? '' : 's'} who might be interested in this group based on AI analysis of their messages and activity!`,
+            [{ text: 'OK' }]
+          );
+        }
+      } else {
+        console.log('🤖 CreateGroupChatScreen: ❌ No recommendations found');
+        Alert.alert(
+          'No Recommendations',
+          'We couldn\'t find any specific recommendations for this group. Try adding different interests or changing the group name. All your friends are still available to add manually!',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('🤖 CreateGroupChatScreen: ❌ Error getting recommendations:', error);
       Alert.alert(
-        'Recommendations Ready',
-        'AI recommendations are temporarily unavailable, but we found some friends who might be interested!',
+        'Error',
+        'Failed to get member recommendations. Please try again.',
         [{ text: 'OK' }]
       );
+    } finally {
+      console.log('🤖 CreateGroupChatScreen: === MEMBER RECOMMENDATIONS REQUEST END ===');
     }
   };
   
   const filteredFriends = useMemo(() => {
-    if (!searchQuery) return friends;
+    if (!friends || !searchQuery) return friends || [];
     const filtered = friends.filter(friend =>
-      friend.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      friend.display_name.toLowerCase().includes(searchQuery.toLowerCase())
+      friend.username?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      friend.display_name?.toLowerCase().includes(searchQuery.toLowerCase())
     );
     console.log('🔍 CreateGroupChatScreen: Filtered friends:', filtered.length, 'of', friends.length);
     return filtered;
@@ -506,12 +643,14 @@ const CreateGroupChatScreen = () => {
   }, [groupMemberRecommendations]);
 
   const selectedFriends = useMemo(() => {
+    if (!friends) return [];
     const selected = friends.filter(f => selectedFriendIds.has(f.id));
     console.log('👥 CreateGroupChatScreen: Selected friends:', selected.map(f => f.display_name));
     return selected;
   }, [friends, selectedFriendIds]);
 
   const availableFriends = useMemo(() => {
+    if (!filteredFriends) return [];
     const available = filteredFriends.filter(f => !selectedFriendIds.has(f.id));
     console.log('👥 CreateGroupChatScreen: Available friends:', available.length);
     return available;
@@ -550,7 +689,9 @@ const CreateGroupChatScreen = () => {
           <Text style={styles.friendName}>{friend.display_name}</Text>
           <Text style={styles.friendUsername}>@{friend.username}</Text>
           {isRecommended && (
-            <Text style={styles.recommendedLabel}>AI Recommended</Text>
+            <Text style={styles.recommendedLabel}>
+              {lastRecommendationSource === 'ai' ? 'AI Recommended' : 'Recommended'}
+            </Text>
           )}
         </View>
         <Ionicons
