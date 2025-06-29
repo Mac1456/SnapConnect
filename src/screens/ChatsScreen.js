@@ -64,6 +64,19 @@ export default function ChatsScreen({ navigation }) {
     }, [user])
   );
 
+  // Helper function to check if an ephemeral message has expired
+  const isMessageExpired = (message) => {
+    if (!message.timer_seconds || message.timer_seconds === 0) {
+      return false; // Not an ephemeral message
+    }
+    
+    const messageTime = new Date(message.created_at);
+    const expirationTime = new Date(messageTime.getTime() + (message.timer_seconds * 1000));
+    const now = new Date();
+    
+    return now > expirationTime;
+  };
+
   const loadConversations = async () => {
     try {
       setLoading(true);
@@ -84,10 +97,19 @@ export default function ChatsScreen({ navigation }) {
         return;
       }
 
+      // Filter out expired ephemeral messages
+      const validMessages = data?.filter(message => {
+        if (isMessageExpired(message)) {
+          console.log('💬 ChatsScreen: 🕐 Filtering out expired ephemeral message:', message.id);
+          return false;
+        }
+        return true;
+      }) || [];
+
       // Group messages by conversation partner
       const conversationMap = new Map();
       
-      data?.forEach(message => {
+      validMessages.forEach(message => {
         const isFromMe = message.sender_id === user.uid;
         const partnerId = isFromMe ? message.recipient_id : message.sender_id;
         const partner = isFromMe ? message.recipient : message.sender;

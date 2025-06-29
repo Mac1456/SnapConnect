@@ -144,7 +144,15 @@ export const useGroupChatStore = create((set, get) => ({
           updated_at: new Date().toISOString()
         })
         .eq('id', groupChatId)
-        .select()
+        .select(`
+          *,
+          creator:creator_id (
+            id,
+            username,
+            display_name,
+            profile_picture
+          )
+        `)
         .single();
 
       if (error) throw error;
@@ -158,7 +166,7 @@ export const useGroupChatStore = create((set, get) => ({
         loading: false
       }));
 
-      console.log('💬 GroupChatStore: Members added successfully.');
+      console.log('💬 GroupChatStore: Members added successfully. New member count:', updatedGroup.member_ids?.length);
       return updatedGroup;
     } catch (error) {
       console.error('💬 GroupChatStore: Error adding members:', error);
@@ -206,7 +214,15 @@ export const useGroupChatStore = create((set, get) => ({
           updated_at: new Date().toISOString()
         })
         .eq('id', groupChatId)
-        .select()
+        .select(`
+          *,
+          creator:creator_id (
+            id,
+            username,
+            display_name,
+            profile_picture
+          )
+        `)
         .single();
 
       if (error) throw error;
@@ -219,7 +235,7 @@ export const useGroupChatStore = create((set, get) => ({
         loading: false
       }));
 
-      console.log('💬 GroupChatStore: Member removed successfully.');
+      console.log('💬 GroupChatStore: Member removed successfully. New member count:', updatedGroup.member_ids?.length);
       return updatedGroup;
     } catch (error) {
       console.error('💬 GroupChatStore: Error removing member:', error);
@@ -229,9 +245,9 @@ export const useGroupChatStore = create((set, get) => ({
   },
 
   // Send a message to a group chat
-  sendGroupMessage: async (groupChatId, content, messageType = 'text', mediaUrl = null) => {
+  sendGroupMessage: async (groupChatId, content, messageType = 'text', mediaUrl = null, timerSeconds = 0) => {
     try {
-      console.log('💬 GroupChatStore: Sending group message:', { groupChatId, content, messageType });
+      console.log('💬 GroupChatStore: Sending group message:', { groupChatId, content, messageType, timerSeconds });
 
       const { user } = useSupabaseAuthStore.getState();
       const userId = user?.uid || user?.id;
@@ -260,7 +276,8 @@ export const useGroupChatStore = create((set, get) => ({
           message_type: messageType,
           media_url: mediaUrl,
           group_chat_id: groupChatId,
-          group_members: groupChat.member_ids
+          group_members: groupChat.member_ids,
+          timer_seconds: timerSeconds || 0
         })
         .select(`
           *,
@@ -278,7 +295,29 @@ export const useGroupChatStore = create((set, get) => ({
         throw error;
       }
 
-      console.log('💬 GroupChatStore: Group message sent:', data);
+      console.log('💬 GroupChatStore: 📤 Group message sent:', data);
+
+      // Optimistically add message to local state for immediate feedback
+      const optimisticMessage = {
+        id: data.id,
+        text: data.content,
+        senderId: data.sender_id,
+        senderName: data.sender?.display_name || data.sender?.username || 'You',
+        timestamp: new Date(data.created_at),
+        isSystem: data.message_type === 'system',
+        timerSeconds: data.timer_seconds || 0
+      };
+
+      // Only add if it doesn't already exist (to prevent duplicates)
+      const currentState = get();
+      const existingMessage = currentState.groupMessages.find(msg => msg.id === data.id);
+      
+      if (!existingMessage) {
+        console.log('💬 GroupChatStore: 📤 Adding sent message to local state optimistically');
+        set(state => ({
+          groupMessages: [...state.groupMessages, optimisticMessage]
+        }));
+      }
 
       // Update group chat timestamp
       await supabase
@@ -291,7 +330,7 @@ export const useGroupChatStore = create((set, get) => ({
     } catch (error) {
       console.error('💬 GroupChatStore: Error sending group message:', JSON.stringify(error, null, 2));
       set({ error: error.message });
-      return null;
+      throw error; // Re-throw so the UI can handle it
     }
   },
 
@@ -362,7 +401,8 @@ export const useGroupChatStore = create((set, get) => ({
         senderId: msg.sender_id,
         senderName: msg.sender?.display_name || msg.sender?.username || 'Unknown',
         timestamp: new Date(msg.created_at),
-        isSystem: msg.message_type === 'system'
+        isSystem: msg.message_type === 'system',
+        timerSeconds: msg.timer_seconds || 0
       }));
 
       console.log('💬 GroupChatStore: Processed messages:', processedMessages);
@@ -380,66 +420,233 @@ export const useGroupChatStore = create((set, get) => ({
 
   // Set up real-time subscription for group messages
   setupGroupMessageSubscription: (groupChatId) => {
-    console.log('💬 GroupChatStore: Setting up real-time subscription for group:', groupChatId);
+    console.log('💬 GroupChatStore: 📡 Setting up real-time subscription for group:', groupChatId);
     
     if (!groupChatId) {
-      console.error('💬 GroupChatStore: Cannot setup subscription - no group chat ID');
+      console.error('💬 GroupChatStore: 📡 Cannot setup subscription - no group chat ID provided');
       return null;
     }
 
-    try {
-      const subscription = supabase
-        .channel(`group-messages-${groupChatId}`)
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'messages',
-            filter: `group_chat_id=eq.${groupChatId}`
-          },
-          async (payload) => {
-            console.log('💬 GroupChatStore: Real-time message received:', payload);
-            
-            if (payload.new) {
-              // Fetch the sender information
-              const { data: sender } = await supabase
-                .from('users')
-                .select('id, username, display_name, profile_picture')
-                .eq('id', payload.new.sender_id)
-                .single();
+    if (!supabase) {
+      console.error('💬 GroupChatStore: 📡 Supabase client not available');
+      return null;
+    }
 
-              const newMessage = {
-                id: payload.new.id,
-                text: payload.new.content,
-                senderId: payload.new.sender_id,
-                senderName: sender?.display_name || sender?.username || 'Unknown',
-                timestamp: new Date(payload.new.created_at),
-                isSystem: payload.new.message_type === 'system'
-              };
+    let subscription = null;
+    let retryCount = 0;
+    const maxRetries = 3;
 
-              console.log('💬 GroupChatStore: Adding new message to state:', newMessage);
+    const createSubscription = () => {
+      try {
+        console.log('💬 GroupChatStore: 📡 Creating Supabase channel...');
+        
+        const channelName = `group-messages-${groupChatId}-${Date.now()}`;
+        const channel = supabase.channel(channelName);
+        
+        if (!channel) {
+          console.error('💬 GroupChatStore: 📡 Failed to create channel');
+          return null;
+        }
+
+        subscription = channel
+          .on(
+            'postgres_changes',
+            {
+              event: 'INSERT',
+              schema: 'public',
+              table: 'messages',
+              filter: `group_chat_id=eq.${groupChatId}`
+            },
+            async (payload) => {
+              console.log('💬 GroupChatStore: 📨 Real-time message received:', {
+                event: payload.eventType,
+                table: payload.table,
+                messageId: payload.new?.id,
+                senderId: payload.new?.sender_id,
+                content: payload.new?.content?.substring(0, 30) + '...'
+              });
               
-              set(state => ({
-                groupMessages: [...state.groupMessages, newMessage]
-              }));
-            }
-          }
-        )
-        .subscribe((status) => {
-          console.log('💬 GroupChatStore: Subscription status:', status);
-        });
+              if (payload.new) {
+                try {
+                  // Check if message already exists to prevent duplicates
+                  const currentState = get();
+                  const existingMessage = currentState.groupMessages.find(msg => msg.id === payload.new.id);
+                  
+                  if (existingMessage) {
+                    console.log('💬 GroupChatStore: 📨 Message already exists, skipping:', payload.new.id);
+                    return;
+                  }
 
-      console.log('💬 GroupChatStore: Subscription created successfully');
+                  console.log('💬 GroupChatStore: 📨 Fetching sender information...');
+                  
+                  // Fetch the sender information
+                  const { data: sender, error: senderError } = await supabase
+                    .from('users')
+                    .select('id, username, display_name, profile_picture')
+                    .eq('id', payload.new.sender_id)
+                    .single();
+
+                  if (senderError) {
+                    console.error('💬 GroupChatStore: 📨 Error fetching sender:', senderError);
+                  }
+
+                  const newMessage = {
+                    id: payload.new.id,
+                    text: payload.new.content,
+                    senderId: payload.new.sender_id,
+                    senderName: sender?.display_name || sender?.username || 'Unknown',
+                    timestamp: new Date(payload.new.created_at),
+                    isSystem: payload.new.message_type === 'system',
+                    timerSeconds: payload.new.timer_seconds || 0
+                  };
+
+                  console.log('💬 GroupChatStore: 📨 Adding new message to state:', {
+                    id: newMessage.id,
+                    text: newMessage.text.substring(0, 30) + '...',
+                    sender: newMessage.senderName,
+                    timestamp: newMessage.timestamp.toLocaleTimeString(),
+                    timerSeconds: newMessage.timerSeconds
+                  });
+                  
+                  set(state => ({
+                    groupMessages: [...state.groupMessages, newMessage]
+                  }));
+                  
+                  console.log('💬 GroupChatStore: 📨 Total messages after adding:', get().groupMessages.length);
+                  
+                } catch (messageError) {
+                  console.error('💬 GroupChatStore: 📨 Error processing real-time message:', messageError);
+                }
+              }
+            }
+          )
+          .subscribe((status) => {
+            console.log('💬 GroupChatStore: 📡 Subscription status:', status);
+            
+            if (status === 'SUBSCRIBED') {
+              console.log('✅ GroupChatStore: 📡 Successfully subscribed to group messages');
+              retryCount = 0; // Reset retry count on successful subscription
+            } else if (status === 'CHANNEL_ERROR') {
+              console.error('❌ GroupChatStore: 📡 Channel error in subscription');
+              
+              // Retry subscription with exponential backoff
+              if (retryCount < maxRetries) {
+                retryCount++;
+                const delay = Math.pow(2, retryCount) * 1000; // 2s, 4s, 8s
+                console.log(`💬 GroupChatStore: 📡 Retrying subscription in ${delay}ms (attempt ${retryCount}/${maxRetries})`);
+                
+                setTimeout(() => {
+                  if (subscription) {
+                    subscription.unsubscribe();
+                  }
+                  subscription = createSubscription();
+                }, delay);
+              } else {
+                console.error('❌ GroupChatStore: 📡 Max retries reached, giving up on subscription');
+              }
+            } else if (status === 'TIMED_OUT') {
+              console.error('❌ GroupChatStore: 📡 Subscription timed out');
+            } else if (status === 'CLOSED') {
+              console.log('💬 GroupChatStore: 📡 Subscription closed');
+            }
+          });
+
+        console.log('💬 GroupChatStore: 📡 Subscription created successfully:', {
+          subscriptionExists: !!subscription,
+          subscriptionType: typeof subscription,
+          hasUnsubscribe: subscription && typeof subscription.unsubscribe === 'function',
+          channelName
+        });
+        
+        return subscription;
+      } catch (error) {
+        console.error('❌ GroupChatStore: 📡 Error creating subscription:', error);
+        return null;
+      }
+    };
+
+    // Create initial subscription
+    subscription = createSubscription();
+    
+    // Return cleanup function
+    return () => {
+      console.log('💬 GroupChatStore: 📡 Cleanup function called for subscription');
       
-      return () => {
-        console.log('💬 GroupChatStore: Unsubscribing from group messages');
-        subscription.unsubscribe();
-      };
+      if (subscription) {
+        try {
+          console.log('💬 GroupChatStore: 📡 Unsubscribing from group messages');
+          subscription.unsubscribe();
+          console.log('💬 GroupChatStore: 📡 Successfully unsubscribed from group messages');
+        } catch (unsubscribeError) {
+          console.error('❌ GroupChatStore: 📡 Error during unsubscribe:', unsubscribeError);
+        }
+      } else {
+        console.log('💬 GroupChatStore: 📡 No subscription to unsubscribe from');
+      }
+    };
+  },
+
+  // Delete a group chat (admin only)
+  deleteGroup: async (groupChatId) => {
+    try {
+      console.log('💬 GroupChatStore: Deleting group:', groupChatId);
+      set({ loading: true, error: null });
+
+      const { user } = useSupabaseAuthStore.getState();
+      const userId = user?.uid || user?.id;
+
+      if (!userId) {
+        throw new Error('User not authenticated');
+      }
+
+      // Get current group info to check admin status
+      const { data: groupChat, error: fetchError } = await supabase
+        .from('group_chats')
+        .select('admin_ids, name, creator_id')
+        .eq('id', groupChatId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Check if user is admin or creator
+      if (!groupChat.admin_ids.includes(userId) && groupChat.creator_id !== userId) {
+        throw new Error('Only group admins can delete the group.');
+      }
+
+      // Delete all group messages first
+      const { error: messagesError } = await supabase
+        .from('group_messages')
+        .delete()
+        .eq('group_chat_id', groupChatId);
+
+      if (messagesError) {
+        console.warn('💬 GroupChatStore: Error deleting group messages:', messagesError);
+        // Continue with group deletion even if message deletion fails
+      }
+
+      // Delete the group chat
+      const { error: deleteError } = await supabase
+        .from('group_chats')
+        .delete()
+        .eq('id', groupChatId);
+
+      if (deleteError) throw deleteError;
+
+      // Remove from local state
+      set(state => ({
+        groupChats: state.groupChats.filter(chat => chat.id !== groupChatId),
+        currentGroupChat: state.currentGroupChat?.id === groupChatId ? null : state.currentGroupChat,
+        groupMessages: state.currentGroupChat?.id === groupChatId ? [] : state.groupMessages,
+        loading: false
+      }));
+
+      console.log('💬 GroupChatStore: Group deleted successfully');
+      return true;
 
     } catch (error) {
-      console.error('💬 GroupChatStore: Error setting up subscription:', error);
-      return null;
+      console.error('💬 GroupChatStore: Error deleting group:', error);
+      set({ error: error.message, loading: false });
+      throw error;
     }
   },
 

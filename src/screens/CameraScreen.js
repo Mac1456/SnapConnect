@@ -76,8 +76,10 @@ export default function CameraScreen({ navigation, route }) {
     // It ensures that we fetch new AI suggestions tailored to that mood.
     if (showCaptionModal && pendingMediaUri) {
       console.log(`🤖 CameraScreen: Mood changed to '${captionMood}'. Regenerating captions...`);
-      const friendIds = friends.map(f => f.id);
-      generateCaptions(pendingMediaType, '', captionMood, friendIds);
+      const friendIds = friends?.map(f => f.id) || [];
+      generateCaptions(pendingMediaType, '', captionMood, friendIds).catch(error => {
+        console.warn('🤖 CameraScreen: Failed to regenerate captions for mood change:', error);
+      });
     }
   }, [captionMood, showCaptionModal]);
 
@@ -102,7 +104,11 @@ export default function CameraScreen({ navigation, route }) {
 
   const handleCameraReady = () => {
     console.log('🎥 CameraScreen: Camera is ready');
-    setIsReady(true);
+    // Add a small delay to ensure camera is fully initialized
+    setTimeout(() => {
+      setIsReady(true);
+      console.log('🎥 CameraScreen: Camera ready state set to true');
+    }, 500);
   };
 
   const startRecordingTimer = () => {
@@ -148,9 +154,10 @@ export default function CameraScreen({ navigation, route }) {
       startRecordingTimer();
       
       const video = await cameraRef.current.recordAsync({
-        quality: '720p',
+        quality: '480p', // Lower quality for better reliability
         maxDuration: 30, // 30 seconds max
         mute: false,
+        codec: 'mp4',
       });
       
       console.log('🎥 CameraScreen: Video recorded:', video.uri);
@@ -241,10 +248,14 @@ export default function CameraScreen({ navigation, route }) {
       setIsCapturing(true);
       console.log('🎥 CameraScreen: Taking picture...');
       
+      // Wait a small moment to ensure camera is fully ready
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.8,
+        quality: 0.7,
         base64: false,
-        skipProcessing: false,
+        skipProcessing: true, // Skip processing to avoid capture errors
+        exif: false, // Disable EXIF data to speed up capture
       });
       
       console.log('🎥 CameraScreen: Photo taken:', photo.uri);
@@ -289,7 +300,55 @@ export default function CameraScreen({ navigation, route }) {
       
     } catch (error) {
       console.error('🎥 CameraScreen: Error taking picture:', error);
-      Alert.alert('Error', 'Failed to take photo. Please try again.');
+      
+      // Try alternative capture method if the first attempt fails
+      if (error.message?.includes('Image could not be captured')) {
+        try {
+          console.log('🎥 CameraScreen: Retrying with alternative settings...');
+          await new Promise(resolve => setTimeout(resolve, 200));
+          
+          const photo = await cameraRef.current.takePictureAsync({
+            quality: 0.5,
+            base64: false,
+            skipProcessing: true,
+            exif: false,
+          });
+          
+          console.log('🎥 CameraScreen: Photo taken on retry:', photo.uri);
+          
+          // Process the photo normally
+          if (recipientId && mode === 'snap') {
+            await handleDirectSnap(photo.uri, 'image');
+            return;
+          }
+          
+          Alert.alert(
+            'Photo Captured!',
+            'What would you like to do with this photo?',
+            [
+              { text: 'Post as Story', onPress: () => handleCapturedMedia(photo.uri, 'image', 'story') },
+              { text: 'Send as Snap', onPress: () => handleCapturedMedia(photo.uri, 'image', 'snap') },
+              { text: 'Take Another', onPress: () => setIsCapturing(false) },
+              { text: 'Done', onPress: () => navigation.goBack() }
+            ]
+          );
+          
+        } catch (retryError) {
+          console.error('🎥 CameraScreen: Retry also failed:', retryError);
+          Alert.alert(
+            'Camera Error', 
+            'Unable to capture photo. Try switching camera or restarting the app.',
+            [
+              { text: 'Switch Camera', onPress: () => { setIsCapturing(false); switchCamera(); } },
+              { text: 'Use Camera Roll', onPress: () => { setIsCapturing(false); openCameraRoll(); } },
+              { text: 'Cancel', onPress: () => setIsCapturing(false) }
+            ]
+          );
+        }
+      } else {
+        Alert.alert('Error', 'Failed to take photo. Please try again.');
+      }
+      
       setIsCapturing(false);
     }
   };
@@ -363,12 +422,14 @@ export default function CameraScreen({ navigation, route }) {
       setPendingMediaType(mediaType);
       setPendingActionType(type);
       
-      // Generate AI captions
-      console.log('🤖 CameraScreen: Generating AI captions...');
-      const friendIds = friends.map(f => f.id);
-      await generateCaptions(mediaType, '', captionMood, friendIds);
+      // Generate AI captions in the background (don't wait for it)
+      console.log('🤖 CameraScreen: Generating AI captions in background...');
+      const friendIds = friends?.map(f => f.id) || [];
+      generateCaptions(mediaType, '', captionMood, friendIds).catch(error => {
+        console.warn('🤖 CameraScreen: AI caption generation failed, but continuing:', error);
+      });
       
-      // Show caption selection modal
+      // Show caption selection modal immediately
       setShowCaptionModal(true);
       
     } catch (error) {
@@ -410,7 +471,7 @@ export default function CameraScreen({ navigation, route }) {
   const showFriendSelection = (uri, mediaType, caption = '') => {
     // For now, show a simple alert with friend options
     // In a full app, this would be a modal with friend list
-    if (friends.length === 0) {
+    if (!friends || friends.length === 0) {
       Alert.alert(
         'No Friends',
         'Add friends to send snaps! Go to the Chats tab to add friends.',
@@ -597,8 +658,10 @@ export default function CameraScreen({ navigation, route }) {
         style={styles.camera}
         facing={facing}
         onCameraReady={handleCameraReady}
-        ratio="16:9"
-        mode="video"
+        mode="picture"
+        enableTorch={false}
+        autoFocus="on"
+        zoom={0}
       />
       
       {/* Camera Overlay - Using absolute positioning to avoid CameraView children warning */}
@@ -633,7 +696,8 @@ export default function CameraScreen({ navigation, route }) {
         {/* Instructions */}
         <View style={styles.instructionsContainer}>
           <Text style={styles.instructionsText}>
-            {isRecording ? 'Recording...' : 
+            {!isReady ? 'Preparing camera...' :
+             isRecording ? 'Recording...' : 
              recipientId && mode === 'snap' ? `Taking snap for ${recipientUsername}` :
              'Tap for photo • Hold for video'}
           </Text>
@@ -916,38 +980,92 @@ export default function CameraScreen({ navigation, route }) {
                 </View>
               ) : (
                 <>
-                  <Text style={{
-                    fontSize: 16,
-                    fontWeight: 'bold',
-                    color: currentTheme.colors.text,
+                  <View style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
                     marginBottom: 12,
                   }}>
-                    AI Suggestions:
-                  </Text>
-                  {generatedCaptions.map((caption, index) => (
+                    <Text style={{
+                      fontSize: 16,
+                      fontWeight: 'bold',
+                      color: currentTheme.colors.text,
+                    }}>
+                      AI Suggestions:
+                    </Text>
                     <TouchableOpacity
-                      key={index}
-                      onPress={() => setSelectedCaption(caption)}
+                      onPress={async () => {
+                        try {
+                          const friendIds = friends?.map(f => f.id) || [];
+                          await generateCaptions(pendingMediaType, '', captionMood, friendIds);
+                        } catch (error) {
+                          console.warn('🤖 CameraScreen: Failed to refresh AI captions:', error);
+                        }
+                      }}
                       style={{
-                        padding: 16,
-                        marginBottom: 10,
-                        borderRadius: 15,
-                        backgroundColor: selectedCaption === caption ? 
-                          currentTheme.colors.snapYellow + '40' : currentTheme.colors.surface,
-                        borderWidth: 2,
-                        borderColor: selectedCaption === caption ? 
-                          currentTheme.colors.snapYellow : currentTheme.colors.border,
+                        padding: 8,
+                        borderRadius: 12,
+                        backgroundColor: currentTheme.colors.snapYellow + '20',
+                        borderWidth: 1,
+                        borderColor: currentTheme.colors.snapYellow,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 4,
                       }}
                     >
+                      <Ionicons name="refresh" size={16} color={currentTheme.colors.snapYellow} />
                       <Text style={{
-                        color: currentTheme.colors.text,
-                        fontSize: 16,
-                        fontWeight: selectedCaption === caption ? 'bold' : 'normal',
+                        color: currentTheme.colors.snapYellow,
+                        fontSize: 12,
+                        fontWeight: 'bold',
                       }}>
-                        {caption}
+                        New
                       </Text>
                     </TouchableOpacity>
-                  ))}
+                  </View>
+                  {generatedCaptions && generatedCaptions.length > 0 ? (
+                    generatedCaptions.map((caption, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        onPress={() => setSelectedCaption(caption)}
+                        style={{
+                          padding: 16,
+                          marginBottom: 10,
+                          borderRadius: 15,
+                          backgroundColor: selectedCaption === caption ? 
+                            currentTheme.colors.snapYellow + '40' : currentTheme.colors.surface,
+                          borderWidth: 2,
+                          borderColor: selectedCaption === caption ? 
+                            currentTheme.colors.snapYellow : currentTheme.colors.border,
+                        }}
+                      >
+                        <Text style={{
+                          color: currentTheme.colors.text,
+                          fontSize: 16,
+                          fontWeight: selectedCaption === caption ? 'bold' : 'normal',
+                        }}>
+                          {caption}
+                        </Text>
+                      </TouchableOpacity>
+                    ))
+                  ) : (
+                    <View style={{
+                      padding: 20,
+                      borderRadius: 15,
+                      backgroundColor: currentTheme.colors.surface,
+                      borderWidth: 1,
+                      borderColor: currentTheme.colors.border,
+                      alignItems: 'center',
+                    }}>
+                      <Text style={{
+                        color: currentTheme.colors.textSecondary,
+                        fontSize: 14,
+                        textAlign: 'center',
+                      }}>
+                        Select a mood above and tap "New" to get AI caption suggestions!
+                      </Text>
+                    </View>
+                  )}
                 </>
               )}
 
