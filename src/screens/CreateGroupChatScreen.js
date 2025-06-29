@@ -84,10 +84,8 @@ const CreateGroupChatScreen = () => {
       const newGroup = await createGroupChat(groupName.trim(), interestInput, validMemberIds);
       if (newGroup) {
         // Navigate to the newly created chat screen
-        navigation.replace('GroupChat', { 
-          groupChatId: newGroup.id,
-          groupName: newGroup.name,
-          isNewGroup: true,
+        navigation.navigate('GroupChat', { 
+          group: newGroup
         });
       } else {
         Alert.alert('Error', 'Failed to create group. The group data was not returned.');
@@ -140,8 +138,9 @@ const CreateGroupChatScreen = () => {
         'Please enter a group name or some interests to get member recommendations.'
       );
     }
-    const theme = `Group Name: ${groupName}. Interests: ${groupInterests.join(', ')}`;
-    getGroupMemberRecommendations(theme);
+    // Pass the proper parameters to the function
+    const friendIds = friends.map(f => f.id);
+    getGroupMemberRecommendations(groupName, groupInterests, friendIds);
   };
   
   const filteredFriends = useMemo(() => {
@@ -153,13 +152,15 @@ const CreateGroupChatScreen = () => {
   }, [friends, searchQuery]);
 
   const recommendedFriends = useMemo(() => {
-    if (groupMemberRecommendations.length === 0) return [];
-    return friends.filter(f => groupMemberRecommendations.includes(f.id));
-  }, [groupMemberRecommendations, friends]);
+    if (!groupMemberRecommendations || groupMemberRecommendations.length === 0) return [];
+    // groupMemberRecommendations should be an array of friend objects with similarity scores
+    return groupMemberRecommendations;
+  }, [groupMemberRecommendations]);
 
   const nonRecommendedFriends = useMemo(() => {
-    if (groupMemberRecommendations.length === 0) return filteredFriends;
-    return filteredFriends.filter(f => !groupMemberRecommendations.includes(f.id));
+    if (!groupMemberRecommendations || groupMemberRecommendations.length === 0) return filteredFriends;
+    const recommendedIds = new Set(groupMemberRecommendations.map(f => f.id));
+    return filteredFriends.filter(f => !recommendedIds.has(f.id));
   }, [filteredFriends, groupMemberRecommendations]);
 
   const renderFriendItem = ({ item: friend }) => {
@@ -265,7 +266,11 @@ const CreateGroupChatScreen = () => {
                 {recommendedFriends.length > 0 && (
                   <>
                     <Text style={styles.listHeader}>Recommended</Text>
-                    {recommendedFriends.map(friend => renderFriendItem({ item: friend }))}
+                    {recommendedFriends.map((friend, index) => (
+                      <View key={`recommended-${friend.id}-${index}`}>
+                        {renderFriendItem({ item: friend })}
+                      </View>
+                    ))}
                     <Text style={styles.listHeader}>All Friends</Text>
                   </>
                 )}

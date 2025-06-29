@@ -189,7 +189,7 @@ export default function GroupChatScreen({ route }) {
     groupChats,
     getGroupChats,
     currentGroupChat,
-    messages: groupMessages,
+    groupMessages,
     loading,
     loadGroupMessages,
     sendGroupMessage,
@@ -306,16 +306,16 @@ export default function GroupChatScreen({ route }) {
   };
   
   const renderMessage = ({ item }) => {
-    const isCurrentUser = item.sender_id === currentUserId;
-    const sender = !isCurrentUser ? memberDetails.find(m => m.id === item.sender_id) : null;
+    const isCurrentUser = item.senderId === currentUserId;
+    const sender = !isCurrentUser ? memberDetails.find(m => m.id === item.senderId) : null;
     return (
       <View style={[styles.messageBubble, isCurrentUser ? styles.myMessage : styles.theirMessage]}>
         {!isCurrentUser && sender && (
           <Text style={styles.senderName}>{sender.display_name || 'Unknown User'}</Text>
         )}
-        <Text style={[styles.messageText, !isCurrentUser && styles.theirMessageText]}>{item.content}</Text>
+        <Text style={[styles.messageText, !isCurrentUser && styles.theirMessageText]}>{item.text}</Text>
         <Text style={[styles.messageTimestamp, !isCurrentUser && styles.theirMessageTimestamp]}>
-          {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </Text>
       </View>
     );
@@ -331,7 +331,7 @@ export default function GroupChatScreen({ route }) {
   const renderMemberItem = ({ item }) => (
     <View style={styles.friendItem}>
       <Text style={styles.friendName}>{item.display_name}</Text>
-      {currentGroupChat?.admin_id === currentUserId && item.id !== currentUserId && (
+      {currentGroupChat?.admin_ids?.includes(currentUserId) && item.id !== currentUserId && (
         <TouchableOpacity onPress={() => handleRemoveMemberPress(item.id)} style={{ marginLeft: 'auto' }}>
           <Ionicons name="remove-circle" size={24} color="red" />
         </TouchableOpacity>
