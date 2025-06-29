@@ -22,8 +22,9 @@ import { useSupabaseAuthStore as useAuthStore } from '../stores/supabaseAuthStor
 import { useSupabaseFriendStore as useFriendStore } from '../stores/supabaseFriendStore';
 import { useGroupChatStore } from '../stores/groupChatStore';
 import { useAIStore } from '../stores/aiStore';
+import { useThemeStore } from '../stores/themeStore';
 
-const createStyles = (colors) => StyleSheet.create({
+const createStyles = (colors, isDarkMode) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -36,7 +37,7 @@ const createStyles = (colors) => StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    backgroundColor: colors.card,
+    backgroundColor: colors.surface,
   },
   title: {
     fontSize: 18,
@@ -46,25 +47,25 @@ const createStyles = (colors) => StyleSheet.create({
     textAlign: 'center',
   },
   createButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.snapYellow,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     minWidth: 70,
     alignItems: 'center',
-    shadowColor: colors.primary,
+    shadowColor: colors.snapYellow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 3,
   },
   createButtonText: {
-    color: 'white',
+    color: '#000000',
     fontWeight: 'bold',
     fontSize: 14,
   },
   disabledButton: {
-    backgroundColor: colors.text + '30',
+    backgroundColor: colors.textTertiary,
     shadowOpacity: 0,
     elevation: 0,
   },
@@ -74,14 +75,16 @@ const createStyles = (colors) => StyleSheet.create({
   },
   section: {
     marginVertical: 12,
-    backgroundColor: colors.card,
+    backgroundColor: colors.surface,
     borderRadius: 12,
     padding: 16,
-    shadowColor: colors.text,
+    shadowColor: isDarkMode ? colors.snapYellow : colors.text,
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
+    shadowOpacity: isDarkMode ? 0.2 : 0.1,
     shadowRadius: 2,
     elevation: 1,
+    borderWidth: isDarkMode ? 1 : 0,
+    borderColor: isDarkMode ? colors.border : 'transparent',
   },
   sectionTitle: {
     fontSize: 16,
@@ -90,7 +93,7 @@ const createStyles = (colors) => StyleSheet.create({
     marginBottom: 12,
   },
   input: {
-    backgroundColor: colors.background,
+    backgroundColor: isDarkMode ? colors.surfaceElevated : colors.background,
     color: colors.text,
     padding: 16,
     borderRadius: 12,
@@ -118,20 +121,20 @@ const createStyles = (colors) => StyleSheet.create({
   interestTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.primary,
+    backgroundColor: colors.snapYellow,
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 6,
     marginRight: 8,
     marginBottom: 8,
-    shadowColor: colors.primary,
+    shadowColor: colors.snapYellow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.3,
     shadowRadius: 2,
     elevation: 2,
   },
   interestText: {
-    color: 'white',
+    color: '#000000',
     fontSize: 14,
     marginRight: 6,
     fontWeight: '500',
@@ -146,29 +149,30 @@ const createStyles = (colors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primary,
+    backgroundColor: colors.snapYellow,
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 12,
     gap: 6,
-    shadowColor: colors.primary,
+    shadowColor: colors.snapYellow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 3,
   },
   aiButtonRefresh: {
-    backgroundColor: colors.primary + 'DD', // Slightly transparent for refresh state
-    borderWidth: 1,
-    borderColor: colors.primary,
+    backgroundColor: colors.snapYellow,
+    borderWidth: 2,
+    borderColor: isDarkMode ? colors.snapYellow : colors.snapYellow + '80',
+    transform: [{ scale: 0.98 }],
   },
   aiButtonText: {
-    color: 'white',
+    color: '#000000',
     fontWeight: 'bold',
     fontSize: 14,
   },
   errorText: {
-    color: colors.notification,
+    color: colors.error,
     fontSize: 14,
     textAlign: 'center',
     marginTop: 8,
@@ -189,7 +193,7 @@ const createStyles = (colors) => StyleSheet.create({
     borderRadius: 25,
     marginBottom: 4,
     borderWidth: 2,
-    borderColor: colors.primary,
+    borderColor: colors.snapYellow,
   },
   selectedFriendName: {
     fontSize: 12,
@@ -202,7 +206,7 @@ const createStyles = (colors) => StyleSheet.create({
     position: 'absolute',
     top: -2,
     right: 8,
-    backgroundColor: colors.card,
+    backgroundColor: colors.surface,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: colors.border,
@@ -210,7 +214,7 @@ const createStyles = (colors) => StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.background,
+    backgroundColor: isDarkMode ? colors.surfaceElevated : colors.background,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -234,12 +238,12 @@ const createStyles = (colors) => StyleSheet.create({
     borderRadius: 8,
   },
   recommendedFriendItem: {
-    backgroundColor: colors.primary + '15',
+    backgroundColor: isDarkMode ? colors.snapYellow + '20' : colors.snapYellow + '15',
     borderRadius: 8,
     marginHorizontal: -4,
     paddingHorizontal: 8,
     borderWidth: 1,
-    borderColor: colors.primary + '30',
+    borderColor: isDarkMode ? colors.snapYellow + '40' : colors.snapYellow + '30',
   },
   friendAvatar: {
     width: 44,
@@ -257,12 +261,12 @@ const createStyles = (colors) => StyleSheet.create({
   },
   friendUsername: {
     fontSize: 14,
-    color: colors.text + '70',
+    color: colors.textSecondary,
     marginTop: 2,
   },
   recommendedLabel: {
     fontSize: 12,
-    color: colors.primary,
+    color: isDarkMode ? colors.snapYellow : colors.snapYellow,
     fontWeight: '600',
     marginTop: 2,
   },
@@ -273,9 +277,9 @@ const createStyles = (colors) => StyleSheet.create({
   },
   emptyText: {
     textAlign: 'center',
-    color: colors.text + '60',
+    color: colors.textSecondary,
     fontSize: 16,
-    paddingVertical: 32,
+    marginVertical: 20,
     fontStyle: 'italic',
   },
 });
@@ -283,7 +287,8 @@ const createStyles = (colors) => StyleSheet.create({
 const CreateGroupChatScreen = () => {
   const navigation = useNavigation();
   const { colors } = useTheme();
-  const styles = createStyles(colors || {});
+  const { isDarkMode, currentTheme } = useThemeStore();
+  const styles = createStyles(currentTheme.colors, isDarkMode);
 
   console.log('🏗️ CreateGroupChatScreen: Component initialized');
 
@@ -525,7 +530,7 @@ const CreateGroupChatScreen = () => {
         style={styles.removeFriendButton}
         onPress={() => toggleFriendSelection(friend.id)}
       >
-        <Ionicons name="close-circle" size={20} color={colors.notification} />
+        <Ionicons name="close-circle" size={20} color={currentTheme.colors.error} />
       </TouchableOpacity>
     </View>
   );
@@ -551,7 +556,7 @@ const CreateGroupChatScreen = () => {
         <Ionicons
           name="add-circle"
           size={24}
-          color={colors.primary}
+          color={currentTheme.colors.snapYellow}
         />
       </TouchableOpacity>
     );
@@ -561,7 +566,7 @@ const CreateGroupChatScreen = () => {
     <View key={index} style={styles.interestTag}>
       <Text style={styles.interestText}>{interest}</Text>
       <TouchableOpacity onPress={() => handleRemoveInterest(interest)}>
-        <Ionicons name="close-circle" size={16} color="white" />
+        <Ionicons name="close-circle" size={16} color="#000000" />
       </TouchableOpacity>
     </View>
   );
@@ -575,9 +580,9 @@ const CreateGroupChatScreen = () => {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Ionicons name="close" size={28} color={colors.text} />
-          </TouchableOpacity>
+                  <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Ionicons name="close" size={28} color={currentTheme.colors.text} />
+        </TouchableOpacity>
           <Text style={styles.title}>New Group Chat</Text>
           <TouchableOpacity 
             style={[styles.createButton, groupLoading && styles.disabledButton]} 
@@ -585,7 +590,7 @@ const CreateGroupChatScreen = () => {
             disabled={groupLoading || !groupName.trim()}
           >
             {groupLoading ? (
-              <ActivityIndicator size="small" color="white" />
+              <ActivityIndicator size="small" color="#000000" />
             ) : (
               <Text style={styles.createButtonText}>Create</Text>
             )}
@@ -600,7 +605,7 @@ const CreateGroupChatScreen = () => {
             <TextInput
               style={styles.input}
               placeholder="Group Name (Required)"
-              placeholderTextColor={colors.text + '80'}
+              placeholderTextColor={currentTheme.colors.textSecondary}
               value={groupName}
               onChangeText={setGroupName}
             />
@@ -608,7 +613,7 @@ const CreateGroupChatScreen = () => {
             <TextInput
               style={[styles.input, styles.textArea]}
               placeholder="Group Description (Optional)"
-              placeholderTextColor={colors.text + '80'}
+              placeholderTextColor={currentTheme.colors.textSecondary}
               value={groupDescription}
               onChangeText={setGroupDescription}
               multiline
@@ -619,13 +624,13 @@ const CreateGroupChatScreen = () => {
               <TextInput
                 style={[styles.input, { flex: 1, marginRight: 10 }]}
                 placeholder="Add interests (e.g., hiking, gaming)"
-                placeholderTextColor={colors.text + '80'}
+                placeholderTextColor={currentTheme.colors.textSecondary}
                 value={interestInput}
                 onChangeText={setInterestInput}
                 onSubmitEditing={handleAddInterest}
               />
               <TouchableOpacity style={styles.addButton} onPress={handleAddInterest}>
-                <Ionicons name="add-circle" size={28} color={colors.primary} />
+                <Ionicons name="add-circle" size={28} color={currentTheme.colors.snapYellow} />
               </TouchableOpacity>
             </View>
 
@@ -650,13 +655,13 @@ const CreateGroupChatScreen = () => {
                 disabled={aiLoading}
               >
                 {aiLoading ? (
-                  <ActivityIndicator size="small" color="white" />
+                  <ActivityIndicator size="small" color="#000000" />
                 ) : (
                   <>
                     <Ionicons 
                       name={hasGeneratedDetailsSuggestions ? "refresh" : "bulb"} 
                       size={16} 
-                      color="white" 
+                      color="#000000" 
                     />
                     <Text style={styles.aiButtonText}>
                       {hasGeneratedDetailsSuggestions ? "New Details" : "Suggest Details"}
@@ -675,13 +680,13 @@ const CreateGroupChatScreen = () => {
                 disabled={aiLoading}
               >
                 {aiLoading ? (
-                  <ActivityIndicator size="small" color="white" />
+                  <ActivityIndicator size="small" color="#000000" />
                 ) : (
                   <>
                     <Ionicons 
                       name={hasGeneratedMemberSuggestions ? "refresh" : "people"} 
                       size={16} 
-                      color="white" 
+                      color="#000000" 
                     />
                     <Text style={styles.aiButtonText}>
                       {hasGeneratedMemberSuggestions ? "New Members" : "Suggest Members"}
@@ -717,11 +722,11 @@ const CreateGroupChatScreen = () => {
             <Text style={styles.sectionTitle}>Add Friends</Text>
             
             <View style={styles.searchContainer}>
-              <Ionicons name="search" size={20} color={colors.text + '80'} style={styles.searchIcon} />
+              <Ionicons name="search" size={20} color={currentTheme.colors.textSecondary} style={styles.searchIcon} />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search Friends"
-                placeholderTextColor={colors.text + '80'}
+                placeholderTextColor={currentTheme.colors.textSecondary}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
               />
