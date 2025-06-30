@@ -4,7 +4,6 @@ import { useSupabaseAuthStore } from './supabaseAuthStore';
 import { useSupabaseFriendStore } from './supabaseFriendStore';
 
 export const useAIStore = create((set, get) => ({
-  generatedCaptions: [],
   activitySuggestions: [],
   groupDetailsSuggestions: { groupName: '', groupInterests: [] },
   groupMemberRecommendations: [],
@@ -33,164 +32,103 @@ export const useAIStore = create((set, get) => ({
     });
   },
 
-  // Generate AI captions using RAG
-  generateCaptions: async (mediaType, context = '', mood = 'fun', friendIds = []) => {
+  // Generate AI activity suggestions using RAG
+  generateActivitySuggestions: async (context = '', mood = 'fun', activityType = 'hangout', friendIds = []) => {
     try {
-      console.log('🤖 AIStore: Generating captions with context:', { mediaType, context, mood, friendIds });
+      console.log('🤖 AIStore: Generating activity suggestions with context:', { context, mood, activityType, friendIds });
       set({ loading: true, error: null });
 
       const { user } = useSupabaseAuthStore.getState();
       const userId = user?.uid || user?.id;
 
       if (!userId) {
-        console.warn('🤖 AIStore: User not authenticated, using fallback captions');
-        const fallbackCaptions = get().getFallbackCaptions(mediaType, mood);
+        console.warn('🤖 AIStore: User not authenticated, using fallback activities');
+        const fallbackActivities = get().getFallbackActivities(mood, activityType);
         set({ 
-          generatedCaptions: fallbackCaptions,
+          activitySuggestions: fallbackActivities,
           loading: false,
           error: 'User not authenticated'
         });
-        return fallbackCaptions;
+        return fallbackActivities;
       }
 
-      console.log('🤖 AIStore: Calling caption-generator Edge Function...');
+      console.log('🤖 AIStore: Calling activity-generator Edge Function...');
       
       // Call the Supabase Edge Function
-      const { data, error } = await supabase.functions.invoke('caption-generator', {
+      const { data, error } = await supabase.functions.invoke('activity-generator', {
         body: {
           userId,
           friendIds,
-          mediaType,
           context,
-          mood
+          mood,
+          activityType
         }
       });
 
       if (error) {
-        console.error('🤖 AIStore: Error from caption generator Edge Function:', error);
+        console.error('🤖 AIStore: Error from activity generator Edge Function:', error);
         console.error('🤖 AIStore: Error details:', JSON.stringify(error, null, 2));
         
         // Check if it's a function not found error
         if (error.message?.includes('Function not found') || error.message?.includes('404')) {
-          console.warn('🤖 AIStore: Caption generator function not deployed, using fallback captions');
+          console.warn('🤖 AIStore: Activity generator function not deployed, using fallback activities');
         } else if (error.message?.includes('OPENAI_API_KEY')) {
-          console.warn('🤖 AIStore: OpenAI API key not configured, using fallback captions');
+          console.warn('🤖 AIStore: OpenAI API key not configured, using fallback activities');
         }
         
         throw error;
       }
 
-      if (!data || !data.captions || data.captions.length === 0) {
-        console.warn('🤖 AIStore: No captions returned from Edge Function, using fallback');
-        throw new Error('No captions generated');
+      if (!data || !data.activities || data.activities.length === 0) {
+        console.warn('🤖 AIStore: No activities returned from Edge Function, using fallback');
+        throw new Error('No activities generated');
       }
 
-      // Clean the captions in case the Edge Function didn't clean them properly
-      let cleanedCaptions = data.captions;
-      if (Array.isArray(data.captions)) {
-        cleanedCaptions = data.captions.map(caption => {
-          if (typeof caption === 'string') {
+      // Clean the activities in case the Edge Function didn't clean them properly
+      let cleanedActivities = data.activities;
+      if (Array.isArray(data.activities)) {
+        cleanedActivities = data.activities.map(activity => {
+          if (typeof activity === 'string') {
             // Clean any remaining numbered prefixes
-            return caption
+            return activity
               .replace(/^\d+[\.\)\-\:]?\s*/, '')
               .replace(/^[\-\*\+]\s*/, '')
               .replace(/^["']|["']$/g, '')
               .trim();
           }
-          return caption;
-        }).filter(caption => caption && caption.length > 0);
+          return activity;
+        }).filter(activity => activity && activity.length > 0);
       }
 
-      console.log('🤖 AIStore: Successfully generated clean captions:', cleanedCaptions);
+      console.log('🤖 AIStore: Successfully generated clean activities:', cleanedActivities);
       set({ 
-        generatedCaptions: cleanedCaptions,
+        activitySuggestions: cleanedActivities,
         loading: false,
         error: null
       });
 
-      return cleanedCaptions;
+      return cleanedActivities;
 
     } catch (error) {
-      console.error('🤖 AIStore: Error generating captions:', error);
+      console.error('🤖 AIStore: Error generating activities:', error);
       console.error('🤖 AIStore: Full error object:', JSON.stringify(error, null, 2));
       
-      // Always provide fallback captions based on mood and mediaType
-      const fallbackCaptions = get().getFallbackCaptions(mediaType, mood);
+      // Always provide fallback activities based on mood and activityType
+      const fallbackActivities = get().getFallbackActivities(mood, activityType);
       
-      console.log('🤖 AIStore: Using fallback captions:', fallbackCaptions);
+      console.log('🤖 AIStore: Using fallback activities:', fallbackActivities);
       
       set({ 
-        generatedCaptions: fallbackCaptions,
+        activitySuggestions: fallbackActivities,
         error: `AI service unavailable: ${error.message}`,
         loading: false 
       });
 
-      return fallbackCaptions;
+      return fallbackActivities;
     }
   },
 
-  // Generate AI activity suggestions for friend groups
-  generateActivitySuggestions: async (friendIds = [], context = '') => {
-    try {
-      console.log('🤖 AIStore: Generating activity suggestions for friends:', friendIds);
-      set({ loading: true, error: null });
 
-      const { user } = useSupabaseAuthStore.getState();
-      const userId = user?.uid || user?.id;
-
-      if (!userId) {
-        throw new Error('User not authenticated');
-      }
-
-      // Get user and friend interests for context
-      const { data: userInterests } = await supabase
-        .from('user_interests')
-        .select('interest_category, interest_value, confidence_score')
-        .eq('user_id', userId);
-
-      const { data: friendInterests } = await supabase
-        .from('user_interests')
-        .select('interest_category, interest_value, confidence_score, user_id')
-        .in('user_id', friendIds);
-
-      // Get recent group activities for context
-      const { data: recentActivities } = await supabase
-        .from('friend_group_activities')
-        .select('activity_type, activity_description, location, date_occurred')
-        .contains('user_ids', [userId])
-        .order('date_occurred', { ascending: false })
-        .limit(5);
-
-      // Create activity suggestions based on interests and history
-      const suggestions = await get().createActivitySuggestions(userInterests, friendInterests, recentActivities, context);
-      
-      set({ 
-        activitySuggestions: suggestions,
-        loading: false 
-      });
-
-      return suggestions;
-
-    } catch (error) {
-      console.error('🤖 AIStore: Error generating activity suggestions:', error);
-      
-      const fallbackSuggestions = [
-        '🎬 Movie night at someone\'s place',
-        '🍕 Try that new restaurant everyone\'s talking about',
-        '🎮 Gaming session with the squad',
-        '📸 Photo walk around the city',
-        '☕ Coffee catch-up session'
-      ];
-      
-      set({ 
-        activitySuggestions: fallbackSuggestions,
-        error: error.message,
-        loading: false 
-      });
-
-      return fallbackSuggestions;
-    }
-  },
 
   // Get AI-powered suggestions for group name and interests
   getGroupDetailsRecommendations: async (memberIds, forceRefresh = false) => {
@@ -908,173 +846,282 @@ export const useAIStore = create((set, get) => ({
     return captions;
   },
 
-  // Helper function to get fallback captions
-  getFallbackCaptions: (mediaType, mood) => {
-    const captionSets = {
+  // Helper function to get fallback activities
+  getFallbackActivities: (mood, activityType) => {
+    const activitySets = {
       fun: {
-        image: [
-          'Squad energy is unmatched ⚡',
-          'Making memories with the best crew 💫',
-          'Friendship goals achieved 🙌',
-          'This is what happiness looks like 😊',
-          'Good vibes only with these legends 🌟',
-          'Creating our own sunshine ☀️',
-          'Life is better with friends like these 💛',
-          'Spontaneous adventures with the gang 🎪',
-          'Main character energy activated 🌟',
-          'Chaos coordinators at work 🎭',
-          'Professional memory makers 📸',
-          'Friendship level: Maximum 💯'
+        hangout: [
+          '🎮 Gaming tournament at someone\'s place',
+          '🍿 Movie marathon with snacks galore',
+          '🎲 Board game night with prizes',
+          '🎤 Karaoke session (home or venue)',
+          '🏓 Ping pong or pool competition',
+          '🎨 DIY craft project together',
+          '🧩 Puzzle challenge while chatting',
+          '🎪 Themed costume hangout'
         ],
-        video: [
-          'When the squad gets together magic happens ✨',
-          'Living our movie moment 🎬',
-          'Action-packed memories in the making 🚀',
-          'Epic adventures with epic people 🎭',
-          'This is how we roll 🎪',
-          'Creating content and chaos 📹',
-          'Main character energy with the crew 🌟',
-          'Behind the scenes of our friendship 🎥',
-          'Unscripted moments are the best moments 🎬',
-          'Documentary crew following legends 📹',
-          'Motion picture masterpiece 🎭',
-          'Academy award for best friendship 🏆'
+        adventure: [
+          '🥾 Hiking trail exploration',
+          '🚴 Bike ride to new neighborhoods',
+          '🏖️ Beach day with activities',
+          '🎢 Amusement park adventure',
+          '🧗 Rock climbing or bouldering',
+          '🏕️ Camping under the stars',
+          '🛶 Kayaking or paddleboarding',
+          '🗺️ Geocaching treasure hunt'
+        ],
+        creative: [
+          '🎨 Paint and sip session',
+          '📷 Photo scavenger hunt',
+          '🎭 Improv or acting games',
+          '🎵 Write and record a song',
+          '📝 Collaborative storytelling',
+          '🍳 Cooking challenge competition',
+          '🎪 Plan and film a comedy sketch',
+          '🧵 Learn a new craft together'
+        ],
+        food: [
+          '🍕 Pizza making from scratch',
+          '🌮 Taco bar with all fixings',
+          '🍰 Baking competition',
+          '🍜 Ramen crawl adventure',
+          '🧁 Cupcake decorating party',
+          '🥘 International cuisine night',
+          '🍦 Ice cream sundae bar',
+          '🥞 Brunch potluck gathering'
+        ],
+        entertainment: [
+          '🎬 Film festival marathon',
+          '🎮 Video game tournament',
+          '🎭 Comedy show or open mic',
+          '🎵 Concert or live music',
+          '🎪 Escape room challenge',
+          '🎳 Bowling with silly rules',
+          '🎯 Mini golf competition',
+          '🎨 Paint night at a studio'
         ]
       },
       casual: {
-        image: [
-          'Just us being authentically us 💯',
-          'Low-key moments, high-key love 💛',
-          'Simple times with complex friendships 🌿',
-          'Everyday magic with extraordinary people ✨',
-          'Keeping it real since day one 😌',
-          'Comfortable chaos with the crew 🤝',
-          'No filter needed for genuine moments 📷',
-          'Regular day, irregular friends 🌈',
-          'Vibes are immaculate today 🌸',
-          'Effortlessly iconic 💫',
-          'Natural habitat: Together 🏠',
-          'Casually being legends 😎'
+        hangout: [
+          '☕ Coffee shop hopping',
+          '📚 Bookstore browsing session',
+          '🛍️ Thrift store treasure hunt',
+          '🌳 Picnic in the park',
+          '🚶 Neighborhood walk and talk',
+          '🧘 Meditation or yoga session',
+          '🎧 Podcast listening party',
+          '🌅 Sunrise or sunset watching'
         ],
-        video: [
-          'Unscripted moments are the best moments 📱',
-          'Casual vibes, eternal memories 🎥',
-          'Just another day in paradise with y\'all 🌴',
-          'Spontaneous storytelling 📖',
-          'Raw, real, and ridiculously fun 🎬',
-          'Documenting the ordinary extraordinary 📹',
-          'Chill mode with chaotic energy 😎',
-          'Life unfiltered with the best people 🎭',
-          'Behind the scenes realness 🎥',
-          'Casual Friday energy every day 📱',
-          'Organic content creation 🌱',
-          'Just vibing and thriving 🌊'
+        adventure: [
+          '🚲 Easy bike ride around town',
+          '🌿 Nature walk and photography',
+          '🏞️ Visit a local park or garden',
+          '🦆 Feed ducks at the pond',
+          '🏛️ Museum or gallery visit',
+          '🌉 Bridge or scenic overlook visit',
+          '🚗 Scenic drive with good music',
+          '🎪 Local farmers market exploration'
+        ],
+        creative: [
+          '📖 Start a book club',
+          '✍️ Journal writing session',
+          '🎨 Sketch in the park',
+          '📱 Create TikToks together',
+          '🧩 Work on a jigsaw puzzle',
+          '🎵 Learn ukulele basics',
+          '📝 Write letters to future selves',
+          '🌱 Start a small garden project'
+        ],
+        food: [
+          '🥗 Healthy meal prep session',
+          '🍵 Tea tasting afternoon',
+          '🥪 Sandwich making competition',
+          '🍓 Smoothie bowl creation',
+          '🧀 Cheese and wine tasting',
+          '🍪 Simple cookie baking',
+          '🥤 Homemade lemonade stand',
+          '🍇 Fruit picking adventure'
+        ],
+        entertainment: [
+          '📺 Binge-watch a new series',
+          '🎵 Create collaborative playlists',
+          '📰 Current events discussion',
+          '🎲 Card games afternoon',
+          '📱 Learn new phone apps together',
+          '🎨 Adult coloring books session',
+          '📻 Listen to old radio shows',
+          '🎪 Watch street performances'
         ]
       },
       exciting: {
-        image: [
-          'Adrenaline rush with the rush crew 🔥',
-          'Living life at maximum volume 📢',
-          'Heart racing, friendship chasing 💓',
-          'This is what dreams are made of 🚀',
-          'Electric energy, magnetic friendship ⚡',
-          'Pushing boundaries and breaking limits 🎢',
-          'Adventure mode permanently activated 🌪️',
-          'Can\'t contain this level of excitement 🎆',
-          'Thrill seekers anonymous meeting 🎢',
-          'Maximum energy unlocked ⚡',
-          'Adrenaline addicts in action 💨',
-          'Living on the edge of awesome 🔥'
+        hangout: [
+          '🎢 Theme park day trip',
+          '🏎️ Go-kart racing competition',
+          '🎯 Laser tag battle',
+          '🧗 Indoor rock climbing',
+          '🎪 Trampoline park session',
+          '🏹 Archery lessons',
+          '🎮 VR gaming experience',
+          '🎭 Murder mystery dinner'
         ],
-        video: [
-          'High octane friendship fuel ⛽',
-          'Thrills, chills, and friendship skills 🎢',
-          'Living on the edge of awesome 🔥',
-          'Maximum energy, maximum memories 🚀',
-          'Adrenaline addicts anonymous meeting 💨',
-          'Heart pounding, soul bonding 💓',
-          'This is our action movie montage 🎬',
-          'Excitement overload in progress 🎆',
-          'Fast and furious friendship edition 🏎️',
-          'Extreme sports: Friendship edition 🏂',
-          'High voltage vibes only ⚡',
-          'Danger zone: Fun activated 🚨'
+        adventure: [
+          '🪂 Skydiving or bungee jumping',
+          '🏄 Surfing lessons',
+          '🧗 Outdoor rock climbing',
+          '🚁 Helicopter tour',
+          '🏔️ Mountain hiking challenge',
+          '🚤 Jet ski rental',
+          '🎿 Skiing or snowboarding',
+          '🏕️ Wilderness survival challenge'
+        ],
+        creative: [
+          '🎭 Flash mob planning',
+          '🎬 Action movie recreation',
+          '🎪 Circus skills workshop',
+          '🎨 Graffiti art class (legal)',
+          '🎵 Battle of the bands setup',
+          '📹 Extreme sports filming',
+          '🎭 Stunt choreography class',
+          '🎪 Fire safety performance art'
+        ],
+        food: [
+          '🌶️ Spicy food challenge',
+          '⏰ Speed cooking competition',
+          '🍳 Iron Chef style battle',
+          '🔥 BBQ competition',
+          '🥘 Exotic cuisine adventure',
+          '🍜 Ramen challenge',
+          '🎂 Extreme cake decorating',
+          '🍕 Pizza eating contest'
+        ],
+        entertainment: [
+          '🎢 Roller coaster marathon',
+          '🎮 Gaming tournament with stakes',
+          '🎪 Extreme escape rooms',
+          '🎭 Improv competition',
+          '🎵 Karaoke battle royale',
+          '🏆 Sports tournament',
+          '🎯 Competitive mini golf',
+          '🎪 Circus performance class'
         ]
       },
       nostalgic: {
-        image: [
-          'Time capsule moments with timeless friends 🕰️',
-          'Golden hour with golden hearts 💛',
-          'Building memories that will last forever 🏗️',
-          'These are the good old days happening now 📚',
-          'Friendship that transcends time ⏳',
-          'Making history one moment at a time 📖',
-          'Precious gems in life\'s treasure chest 💎',
-          'Forever friends in a temporary world 🌍',
-          'Vintage vibes with modern hearts 💫',
-          'Timeless bonds, priceless moments 💝',
-          'Memory lane architects 🛤️',
-          'Classic friendship, never goes out of style ✨'
+        hangout: [
+          '📼 90s/2000s throwback party',
+          '🎮 Retro gaming session',
+          '📱 Look through old photos',
+          '🎵 Childhood music playlist',
+          '🍭 Candy from your youth',
+          '📺 Watch childhood movies',
+          '🎲 Classic board games',
+          '📝 Memory sharing circle'
         ],
-        video: [
-          'Capturing the essence of eternal friendship 🎥',
-          'These moments will echo through time 🔄',
-          'Building our legacy one laugh at a time 📹',
-          'Time travelers documenting the journey 🚀',
-          'Memory lane construction in progress 🛤️',
-          'Friendship that ages like fine wine 🍷',
-          'Creating tomorrow\'s favorite memories today 💭',
-          'Timeless bonds in motion 🎬',
-          'Vintage souls, modern memories 📹',
-          'History in the making 📚',
-          'Sentimental journey with the best crew 🚂',
-          'Forever moments captured in time 🕰️'
+        adventure: [
+          '🏫 Visit your old school',
+          '🏞️ Return to childhood hangouts',
+          '🎪 County fair or carnival',
+          '🎨 Recreate childhood photos',
+          '🚲 Bike to old favorite spots',
+          '🏖️ Beach day like old times',
+          '🎢 Amusement park nostalgia',
+          '🌳 Tree house building'
+        ],
+        creative: [
+          '📖 Create a friendship scrapbook',
+          '🎬 Film a "then vs now" video',
+          '✍️ Write letters to past selves',
+          '🎨 Recreate childhood artwork',
+          '📱 Make a time capsule',
+          '🎵 Record old favorite songs',
+          '📷 Photo recreation project',
+          '🎭 Reenact favorite memories'
+        ],
+        food: [
+          '🧁 Bake childhood favorites',
+          '🍕 Order from old favorite spots',
+          '🥪 Pack lunch like school days',
+          '🍦 Ice cream truck hunt',
+          '🍪 Grandma\'s recipe cooking',
+          '🥤 Make old favorite drinks',
+          '🍰 Birthday cake from scratch',
+          '🍬 Candy making session'
+        ],
+        entertainment: [
+          '📺 Watch old TV shows',
+          '🎵 Listen to high school playlists',
+          '🎮 Play childhood video games',
+          '📚 Read old favorite books',
+          '🎭 Act out favorite movie scenes',
+          '🎪 Visit childhood entertainment venues',
+          '📱 Look at old social media',
+          '🎲 Play games from the past'
         ]
       },
       celebration: {
-        image: [
-          'Success tastes sweeter with the squad 🍾',
-          'Victory dance initiated 💃',
-          'Milestone achieved, memories multiplied 🏆',
-          'Cheers to us and our unstoppable energy 🥂',
-          'Celebration station with the best delegation 🎉',
-          'Worth every moment that led to this 🎊',
-          'Party mode with the perfect people 🎪',
-          'Achievement unlocked: Epic celebration 🔓',
-          'Champions celebrating champion friends 🏅',
-          'Success looks good on us 👑',
-          'Winning streak continues 🎯',
-          'Celebration specialists at work 🎉'
+        hangout: [
+          '🎉 Achievement celebration party',
+          '🏆 Success story sharing',
+          '🥂 Toast with fancy drinks',
+          '🎊 Confetti and decorations',
+          '🎁 Gift exchange celebration',
+          '📸 Victory photo shoot',
+          '🎵 Dance party celebration',
+          '🎪 Themed celebration party'
         ],
-        video: [
-          'Dance like the world is our stage 💃',
-          'Celebration compilation in real time 🎬',
-          'Party documentary featuring legends 📹',
-          'This is how champions celebrate 🏆',
-          'Victory lap with the victory squad 🏃',
-          'Cheers to the journey and the destination 🥂',
-          'Living proof that dreams come true 🌟',
-          'Celebration masterclass in session 🎭',
-          'Confetti cannon of friendship 🎊',
-          'Party mode: Expert level 🎪',
-          'Celebration choreography perfected 💃',
-          'Fireworks of friendship 🎆'
+        adventure: [
+          '🎢 Victory lap at amusement park',
+          '🏔️ Celebratory hike with views',
+          '🚁 Helicopter celebration tour',
+          '🏖️ Beach celebration day',
+          '🎿 Celebration ski trip',
+          '🚤 Boat party celebration',
+          '🎪 Adventure park celebration',
+          '🏕️ Celebration camping trip'
+        ],
+        creative: [
+          '🎬 Create a celebration video',
+          '🎨 Paint a victory mural',
+          '🎵 Write a celebration song',
+          '📝 Create achievement certificates',
+          '🎭 Plan a celebration performance',
+          '📷 Professional photo shoot',
+          '🎪 Design celebration decorations',
+          '🎨 Make celebration artwork'
+        ],
+        food: [
+          '🍾 Champagne and appetizers',
+          '🎂 Custom celebration cake',
+          '🥘 Fancy dinner preparation',
+          '🍕 Victory pizza party',
+          '🧁 Celebration cupcake decorating',
+          '🥂 Wine and cheese celebration',
+          '🍦 Ice cream sundae bar',
+          '🍰 Dessert making marathon'
+        ],
+        entertainment: [
+          '🎭 Celebration show or concert',
+          '🎪 Party games and activities',
+          '🎵 Karaoke celebration',
+          '🎮 Tournament with prizes',
+          '🎬 Movie night with favorites',
+          '🎯 Celebration mini golf',
+          '🎳 Victory bowling session',
+          '🎨 Paint and celebrate night'
         ]
       }
     };
 
-    const moodCaptions = captionSets[mood] || captionSets.fun;
-    const typeCaptions = moodCaptions[mediaType] || moodCaptions.image;
+    const moodActivities = activitySets[mood] || activitySets.fun;
+    const typeActivities = moodActivities[activityType] || moodActivities.hangout;
     
-    // Return 3 random captions from the available options
-    const shuffled = [...typeCaptions].sort(() => 0.5 - Math.random());
+    // Return 3 random activities from the available options
+    const shuffled = [...typeActivities].sort(() => 0.5 - Math.random());
     return shuffled.slice(0, 3);
   },
 
   // Clear generated content
   clearGeneratedContent: () => {
     set({ 
-      generatedCaptions: [],
       activitySuggestions: [],
       error: null 
     });

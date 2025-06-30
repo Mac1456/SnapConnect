@@ -425,17 +425,17 @@ const GroupChatScreen = ({ route }) => {
   const navigation = useNavigation();
   const { group } = route.params || {};
   
-  console.log('💬 GroupChatScreen: 🚀 Component initialized:', {
-    routeGroupId: group?.id,
-    routeGroupName: group?.name,
-    hasRouteParams: !!route.params,
-    routeParamsKeys: route.params ? Object.keys(route.params) : []
-  });
+  if (__DEV__) {
+    console.log('💬 GroupChatScreen: 🚀 Component initialized:', {
+      routeGroupId: group?.id,
+      routeGroupName: group?.name
+    });
+  }
   
   const { user } = useAuthStore();
   const { colors } = useTheme();
   const { isDarkMode } = useThemeStore();
-  const styles = createStyles(colors || {}, isDarkMode);
+  const styles = useMemo(() => createStyles(colors || {}, isDarkMode), [colors, isDarkMode]);
   
   const {
     groupChats,
@@ -456,7 +456,7 @@ const GroupChatScreen = ({ route }) => {
   } = useGroupChatStore();
   
   const { friends, getFriends } = useFriendStore();
-  const { generateCaptions, generatedCaptions: captionSuggestions, loading: aiLoading } = useAIStore();
+  const { generateActivitySuggestions, activitySuggestions, loading: aiLoading } = useAIStore();
 
   // Component State
   const [message, setMessage] = useState('');
@@ -470,62 +470,42 @@ const GroupChatScreen = ({ route }) => {
   const flatListRef = useRef(null);
   const currentUserId = user?.id;
 
-  console.log('💬 GroupChatScreen: 🚀 Initial state check:', {
-    currentUserId,
-    currentGroupChatId: currentGroupChat?.id,
-    groupChatsCount: groupChats?.length || 0,
-    messagesCount: groupMessages?.length || 0,
-    loading,
-    error: !!error
-  });
-
-  // Track when group chats are loaded
-  useEffect(() => {
-    console.log('💬 GroupChatScreen: 📋 Group chats changed:', {
-      groupChatsCount: groupChats?.length || 0,
-      groupChats: groupChats?.map(gc => ({
-        id: gc.id,
-        name: gc.name,
-        memberCount: gc.member_ids?.length || 0
-      })) || []
+  if (__DEV__) {
+    console.log('💬 GroupChatScreen: 🚀 Initial state check:', {
+      currentUserId,
+      currentGroupChatId: currentGroupChat?.id,
+      messagesCount: groupMessages?.length || 0
     });
-  }, [groupChats]);
+  }
 
-  // Track when current group chat changes
+  // Track when group chats are loaded (reduced logging)
   useEffect(() => {
-    if (currentGroupChat) {
+    if (__DEV__) {
+      console.log('💬 GroupChatScreen: 📋 Group chats changed:', {
+        groupChatsCount: groupChats?.length || 0
+      });
+    }
+  }, [groupChats?.length]);
+
+  // Track when current group chat changes (reduced logging)
+  useEffect(() => {
+    if (__DEV__ && currentGroupChat) {
       console.log('💬 GroupChatScreen: 🔄 Current group chat changed:', {
         id: currentGroupChat.id,
-        name: currentGroupChat.name,
-        memberCount: currentGroupChat.member_ids?.length || 0,
-        updatedAt: currentGroupChat.updated_at
+        name: currentGroupChat.name
       });
-    } else {
-      console.log('💬 GroupChatScreen: 🔄 Current group chat cleared');
     }
-  }, [currentGroupChat]);
+  }, [currentGroupChat?.id]);
 
-  // Track when group messages change
+  // Track when group messages change (reduced logging)
   useEffect(() => {
-    console.log('💬 GroupChatScreen: 📨 Group messages changed:', {
-      messagesCount: groupMessages?.length || 0,
-      currentGroupChatId: currentGroupChat?.id,
-      loading,
-      error,
-      firstMessage: groupMessages?.[0] ? {
-        id: groupMessages[0].id,
-        text: groupMessages[0].text?.substring(0, 30) + '...',
-        senderName: groupMessages[0].senderName,
-        timestamp: groupMessages[0].timestamp?.toISOString()
-      } : null,
-      lastMessage: groupMessages?.length > 0 ? {
-        id: groupMessages[groupMessages.length - 1].id,
-        text: groupMessages[groupMessages.length - 1].text?.substring(0, 30) + '...',
-        senderName: groupMessages[groupMessages.length - 1].senderName,
-        timestamp: groupMessages[groupMessages.length - 1].timestamp?.toISOString()
-      } : null
-    });
-  }, [groupMessages, currentGroupChat?.id, loading, error]);
+    if (__DEV__) {
+      console.log('💬 GroupChatScreen: 📨 Group messages changed:', {
+        messagesCount: groupMessages?.length || 0,
+        currentGroupChatId: currentGroupChat?.id
+      });
+    }
+  }, [groupMessages?.length, currentGroupChat?.id]);
 
   // Set current group chat when component mounts or group changes
   useEffect(() => {
@@ -1180,37 +1160,24 @@ const GroupChatScreen = ({ route }) => {
     }
   };
 
-  const handleGetAISuggestions = async () => {
-    console.log('🤖 GroupChatScreen: Opening AI suggestions modal');
+  const handleGetAISuggestions = useCallback(async () => {
+    if (__DEV__) {
+      console.log('🤖 GroupChatScreen: Opening AI suggestions modal');
+    }
     setShowAISuggestions(true);
-  };
+  }, []);
 
-  const selectAISuggestion = (suggestion) => {
-    console.log('🤖 GroupChatScreen: Selected AI suggestion:', suggestion);
+  const selectAISuggestion = useCallback((suggestion) => {
+    if (__DEV__) {
+      console.log('🤖 GroupChatScreen: Selected AI suggestion:', suggestion);
+    }
     setMessage(suggestion);
     setShowAISuggestions(false);
-  };
+  }, []);
 
-  const renderMessage = ({ item }) => {
-    console.log('💬 GroupChatScreen: 🎨 Rendering message:', {
-      messageId: item.id,
-      text: item.text?.substring(0, 30) + '...',
-      senderId: item.senderId,
-      senderName: item.senderName,
-      timestamp: item.timestamp?.toISOString(),
-      isCurrentUser: item.senderId === currentUserId,
-      memberDetailsCount: memberDetails?.length || 0
-    });
-    
+  const renderMessage = useCallback(({ item }) => {
     const isCurrentUser = item.senderId === currentUserId;
     const sender = !isCurrentUser ? memberDetails.find(m => m.id === item.senderId) : null;
-
-    if (!isCurrentUser && !sender) {
-      console.log('💬 GroupChatScreen: ⚠️ Sender not found in memberDetails:', {
-        senderId: item.senderId,
-        availableMemberIds: memberDetails?.map(m => m.id) || []
-      });
-    }
 
     return (
       <View style={[
@@ -1251,9 +1218,9 @@ const GroupChatScreen = ({ route }) => {
         )}
       </View>
     );
-  };
+  }, [currentUserId, memberDetails, isDarkMode, colors.text]);
   
-  const renderFriendSelector = ({ item }) => {
+  const renderFriendSelector = useCallback(({ item }) => {
     const isSelected = selectedFriends.find(f => f.id === item.id);
     return (
       <TouchableOpacity
@@ -1272,7 +1239,7 @@ const GroupChatScreen = ({ route }) => {
         />
       </TouchableOpacity>
     );
-  };
+  }, [selectedFriends, toggleFriendSelection, styles, colors]);
 
   const renderMemberItem = ({ item }) => {
     const isAdmin = currentGroupChat?.admin_ids?.includes(item.id);
@@ -1311,7 +1278,6 @@ const GroupChatScreen = ({ route }) => {
   );
 
   if (loading) {
-    console.log('💬 GroupChatScreen: 🎨 Rendering loading state');
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.loadingContainer}>
@@ -1323,11 +1289,6 @@ const GroupChatScreen = ({ route }) => {
   }
 
   if (!currentGroupChat) {
-    console.log('💬 GroupChatScreen: 🎨 Rendering no group chat state:', {
-      groupChatsCount: groupChats?.length || 0,
-      loading,
-      error
-    });
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.noChatContainer}>
@@ -1348,15 +1309,12 @@ const GroupChatScreen = ({ route }) => {
     );
   }
 
-  console.log('💬 GroupChatScreen: 🎨 Rendering main group chat UI:', {
-    currentGroupChatId: currentGroupChat?.id,
-    currentGroupChatName: currentGroupChat?.name,
-    groupMessagesCount: groupMessages?.length || 0,
-    loading,
-    error,
-    memberDetailsCount: memberDetails?.length || 0,
-    hasMessages: (groupMessages?.length || 0) > 0
-  });
+  if (__DEV__) {
+    console.log('💬 GroupChatScreen: 🎨 Rendering main group chat UI:', {
+      currentGroupChatId: currentGroupChat?.id,
+      messagesCount: groupMessages?.length || 0
+    });
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -1403,9 +1361,6 @@ const GroupChatScreen = ({ route }) => {
         style={styles.messageList}
         contentContainerStyle={styles.messageListContent}
         onContentSizeChange={() => {
-          console.log('💬 GroupChatScreen: 🎨 FlatList content size changed:', {
-            messagesCount: groupMessages?.length || 0
-          });
           // Only auto-scroll if user is near the bottom to prevent interrupting reading
           if (flatListRef.current) {
             setTimeout(() => {
@@ -1414,9 +1369,6 @@ const GroupChatScreen = ({ route }) => {
           }
         }}
         onLayout={() => {
-          console.log('💬 GroupChatScreen: 🎨 FlatList layout completed:', {
-            messagesCount: groupMessages?.length || 0
-          });
           // Scroll to end when component first renders with messages
           if ((groupMessages?.length || 0) > 0) {
             setTimeout(() => {
@@ -1492,7 +1444,7 @@ const GroupChatScreen = ({ route }) => {
             {aiLoading ? (
               <ActivityIndicator size="small" color={colors.primary} />
             ) : (
-              <Ionicons name="bulb-outline" size={20} color={colors.primary} />
+              <Ionicons name="compass-outline" size={20} color={colors.primary} />
             )}
           </TouchableOpacity>
           
@@ -1628,7 +1580,7 @@ const GroupChatScreen = ({ route }) => {
         <View style={styles.modalContainer}>
           <View style={styles.modalView}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>🤖 AI Message Suggestions</Text>
+              <Text style={styles.modalTitle}>🤖 AI Activity Suggestions</Text>
               <TouchableOpacity 
                 onPress={() => setShowAISuggestions(false)}
                 style={styles.closeButton}
@@ -1638,6 +1590,42 @@ const GroupChatScreen = ({ route }) => {
             </View>
 
             <ScrollView style={styles.suggestionsList}>
+              {/* Activity Type Selection */}
+              <Text style={styles.detailSectionTitle}>Choose Activity Type:</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
+                {[
+                  { key: 'hangout', label: 'Hangout', icon: '🏠' },
+                  { key: 'adventure', label: 'Adventure', icon: '🗺️' },
+                  { key: 'creative', label: 'Creative', icon: '🎨' },
+                  { key: 'food', label: 'Food', icon: '🍕' },
+                  { key: 'entertainment', label: 'Entertainment', icon: '🎬' }
+                ].map((type) => (
+                  <TouchableOpacity
+                    key={type.key}
+                    onPress={async () => {
+                      const memberIds = currentGroupChat?.member_ids || [];
+                      const groupContext = `Group: ${currentGroupChat?.name || 'Chat'} with ${memberDetails?.length || 0} members`;
+                      try {
+                        await generateActivitySuggestions(groupContext, 'fun', type.key, memberIds);
+                      } catch (error) {
+                        console.error('🤖 GroupChatScreen: Error generating AI activity suggestions:', error);
+                      }
+                    }}
+                    style={[
+                      styles.moodButton,
+                      {
+                        backgroundColor: colors.card,
+                        borderColor: colors.border,
+                      }
+                    ]}
+                  >
+                    <Text style={[styles.moodButtonText, { color: colors.text }]}>
+                      {type.icon} {type.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
               {/* Mood Selection */}
               <Text style={styles.detailSectionTitle}>Choose Mood:</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
@@ -1648,9 +1636,9 @@ const GroupChatScreen = ({ route }) => {
                       const memberIds = currentGroupChat?.member_ids || [];
                       const groupContext = `Group: ${currentGroupChat?.name || 'Chat'} with ${memberDetails?.length || 0} members`;
                       try {
-                        await generateCaptions('text', groupContext, mood, memberIds);
+                        await generateActivitySuggestions(groupContext, mood, 'hangout', memberIds);
                       } catch (error) {
-                        console.error('🤖 GroupChatScreen: Error generating AI suggestions:', error);
+                        console.error('🤖 GroupChatScreen: Error generating AI activity suggestions:', error);
                       }
                     }}
                     style={[
@@ -1673,14 +1661,14 @@ const GroupChatScreen = ({ route }) => {
                 <View style={{ alignItems: 'center', paddingVertical: 20 }}>
                   <ActivityIndicator size="large" color={colors.primary} />
                   <Text style={[styles.emptyText, { marginTop: 10 }]}>
-                    Generating suggestions...
+                    Generating activity suggestions...
                   </Text>
                 </View>
               ) : (
                 <>
-                  <Text style={styles.detailSectionTitle}>AI Suggestions:</Text>
-                  {captionSuggestions && captionSuggestions.length > 0 ? (
-                    captionSuggestions.map((suggestion, index) => (
+                  <Text style={styles.detailSectionTitle}>AI Activity Suggestions:</Text>
+                  {activitySuggestions && activitySuggestions.length > 0 ? (
+                    activitySuggestions.map((suggestion, index) => (
                       <TouchableOpacity
                         key={index}
                         onPress={() => selectAISuggestion(suggestion)}
@@ -1700,7 +1688,7 @@ const GroupChatScreen = ({ route }) => {
                     ))
                   ) : (
                     <Text style={styles.emptyText}>
-                      Select a mood above to get AI suggestions!
+                      Select an activity type or mood above to get AI suggestions!
                     </Text>
                   )}
                 </>
