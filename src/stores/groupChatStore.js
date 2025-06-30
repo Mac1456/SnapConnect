@@ -372,7 +372,7 @@ export const useGroupChatStore = create((set, get) => ({
 
       console.log('💬 GroupChatStore: 🔍 Querying messages from Supabase...');
       const startTime = Date.now();
-      
+
       const { data, error } = await supabase
         .from('messages')
         .select(`
@@ -426,11 +426,11 @@ export const useGroupChatStore = create((set, get) => ({
         });
         
         return {
-          id: msg.id,
-          text: msg.content,
-          senderId: msg.sender_id,
-          senderName: msg.sender?.display_name || msg.sender?.username || 'Unknown',
-          timestamp: new Date(msg.created_at),
+        id: msg.id,
+        text: msg.content,
+        senderId: msg.sender_id,
+        senderName: msg.sender?.display_name || msg.sender?.username || 'Unknown',
+        timestamp: new Date(msg.created_at),
           isSystem: msg.message_type === 'system',
           timerSeconds: msg.timer_seconds || 0
         };
@@ -555,14 +555,14 @@ export const useGroupChatStore = create((set, get) => ({
         }
 
         subscription = channel
-          .on(
-            'postgres_changes',
-            {
-              event: 'INSERT',
-              schema: 'public',
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
               table: 'messages',
-              filter: `group_chat_id=eq.${groupChatId}`
-            },
+            filter: `group_chat_id=eq.${groupChatId}`
+          },
             async (payload) => {
               console.log('💬 GroupChatStore: 📨 Real-time message received:', {
                 event: payload.eventType,
@@ -571,8 +571,8 @@ export const useGroupChatStore = create((set, get) => ({
                 senderId: payload.new?.sender_id,
                 content: payload.new?.content?.substring(0, 30) + '...'
               });
-              
-              if (payload.new) {
+            
+            if (payload.new) {
                 try {
                   // Check if message already exists to prevent duplicates
                   const currentState = get();
@@ -608,14 +608,14 @@ export const useGroupChatStore = create((set, get) => ({
                   }
 
                   const newMessage = {
-                    id: payload.new.id,
-                    text: payload.new.content,
-                    senderId: payload.new.sender_id,
+                id: payload.new.id,
+                text: payload.new.content,
+                senderId: payload.new.sender_id,
                     senderName: sender?.display_name || sender?.username || 'Unknown',
-                    timestamp: new Date(payload.new.created_at),
+                timestamp: new Date(payload.new.created_at),
                     isSystem: payload.new.message_type === 'system',
                     timerSeconds: payload.new.timer_seconds || 0
-                  };
+              };
 
                   console.log('💬 GroupChatStore: 📨 Adding new message to state:', {
                     id: newMessage.id,
@@ -624,7 +624,7 @@ export const useGroupChatStore = create((set, get) => ({
                     timestamp: newMessage.timestamp.toLocaleTimeString(),
                     timerSeconds: newMessage.timerSeconds
                   });
-                  
+              
                   // Use a more stable state update that doesn't cause flickering
                   set(state => {
                     // Double-check for duplicates before adding
@@ -645,10 +645,10 @@ export const useGroupChatStore = create((set, get) => ({
                 } catch (messageError) {
                   console.error('💬 GroupChatStore: 📨 Error processing real-time message:', messageError);
                 }
-              }
             }
-          )
-          .subscribe((status) => {
+          }
+        )
+        .subscribe((status) => {
             console.log('💬 GroupChatStore: 📡 Subscription status:', status);
             
             if (status === 'SUBSCRIBED') {
@@ -702,7 +702,7 @@ export const useGroupChatStore = create((set, get) => ({
     }
     
     // Return cleanup function
-    return () => {
+      return () => {
       console.log('💬 GroupChatStore: 📡 Cleanup function called for subscription');
       
       if (subscription) {
@@ -776,7 +776,7 @@ export const useGroupChatStore = create((set, get) => ({
 
       console.log('💬 GroupChatStore: Group deleted successfully');
       return true;
-
+      
     } catch (error) {
       console.error('💬 GroupChatStore: Error deleting group:', error);
       set({ error: error.message, loading: false });
@@ -894,7 +894,7 @@ export const useGroupChatStore = create((set, get) => ({
         error: null
       });
     } else {
-      set({ currentGroupChat: groupChat });
+    set({ currentGroupChat: groupChat });
     }
   },
 

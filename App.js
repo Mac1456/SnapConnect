@@ -23,18 +23,24 @@ console.log('📱 App.js: Starting SnapConnect application...');
 const Stack = createStackNavigator();
 
 export default function App() {
-  console.log('📱 App.js: App component rendering...');
+  if (__DEV__) {
+    console.log('📱 App.js: App component rendering...');
+  }
   
   const { user, loading, initialize } = useAuthStore();
   
-  console.log('📱 App.js: Auth state:', { 
-    user: user ? 'User logged in' : 'No user', 
-    loading,
-    userId: user?.uid || 'none'
-  });
+  if (__DEV__) {
+    console.log('📱 App.js: Auth state:', { 
+      user: user ? 'User logged in' : 'No user', 
+      loading,
+      userId: user?.uid || 'none'
+    });
+  }
 
   useEffect(() => {
-    console.log('📱 App.js: useEffect - initializing auth...');
+    if (__DEV__) {
+      console.log('📱 App.js: useEffect - initializing auth...');
+    }
     const subscription = initialize();
     
     // Cleanup subscription on unmount
@@ -46,7 +52,9 @@ export default function App() {
   }, [initialize]);
 
   if (loading) {
-    console.log('📱 App.js: Showing loading state...');
+    if (__DEV__) {
+      console.log('📱 App.js: Showing loading state...');
+    }
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
         <Text style={{ color: '#fff', fontSize: 18 }}>Loading SnapConnect...</Text>
@@ -54,13 +62,15 @@ export default function App() {
     );
   }
 
-  console.log('📱 App.js: Rendering navigation with user:', user ? 'authenticated' : 'not authenticated');
+  if (__DEV__) {
+    console.log('📱 App.js: Rendering navigation with user:', user ? 'authenticated' : 'not authenticated');
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <NavigationContainer
-        onReady={() => console.log('📱 App.js: Navigation container ready')}
-        onStateChange={(state) => console.log('📱 App.js: Navigation state changed:', state?.routeNames)}
+        onReady={() => __DEV__ && console.log('📱 App.js: Navigation container ready')}
+        onStateChange={(state) => __DEV__ && console.log('📱 App.js: Navigation state changed:', state?.routeNames)}
       >
         <StatusBar style="light" />
         <Stack.Navigator 
@@ -71,7 +81,7 @@ export default function App() {
         >
           {user ? (
             <>
-              {console.log('📱 App.js: Rendering authenticated screens')}
+              {__DEV__ && console.log('📱 App.js: Rendering authenticated screens')}
               <Stack.Screen name="MainTabs" component={MainTabNavigator} />
               <Stack.Screen 
                 name="Camera" 
@@ -149,7 +159,7 @@ export default function App() {
             </>
           ) : (
             <>
-              {console.log('📱 App.js: Rendering auth screen')}
+              {__DEV__ && console.log('📱 App.js: Rendering auth screen')}
               <Stack.Screen name="Auth" component={AuthScreen} />
             </>
           )}

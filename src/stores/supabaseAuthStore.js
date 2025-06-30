@@ -92,7 +92,9 @@ export const useSupabaseAuthStore = create((set, get) => ({
       });
 
       if (error) {
-        console.error('🟢 SupabaseAuthStore: signIn error:', error);
+        if (__DEV__) {
+          console.error('🟢 SupabaseAuthStore: signIn error:', error.message);
+        }
         set({ error: error.message, loading: false });
         return null;
       }
@@ -101,7 +103,9 @@ export const useSupabaseAuthStore = create((set, get) => ({
       set({ loading: false });
       return data.user;
     } catch (error) {
-      console.error('🟢 SupabaseAuthStore: signIn error:', error);
+      if (__DEV__) {
+        console.error('🟢 SupabaseAuthStore: signIn catch error:', error.message);
+      }
       set({ error: error.message, loading: false });
       return null;
     }
@@ -378,7 +382,9 @@ export const useSupabaseAuthStore = create((set, get) => ({
             .single();
 
           if (error) {
-            console.error('🟢 SupabaseAuthStore: Error fetching profile:', error);
+            if (__DEV__) {
+              console.error('🟢 SupabaseAuthStore: Error fetching profile:', error.message);
+            }
             // Set basic user data from auth session
             set({
               user: {
@@ -411,7 +417,9 @@ export const useSupabaseAuthStore = create((set, get) => ({
             });
           }
         } catch (error) {
-          console.error('🟢 SupabaseAuthStore: Error in auth state change:', error);
+          if (__DEV__) {
+            console.error('🟢 SupabaseAuthStore: Error in auth state change:', error.message);
+          }
           set({
             user: {
               uid: session.user.id,

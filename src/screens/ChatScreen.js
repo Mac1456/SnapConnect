@@ -732,20 +732,20 @@ const ChatScreen = ({ navigation, route }) => {
               onPress={deleteMessageHistory}
             >
               <Ionicons name="trash-outline" size={20} color="#FF3B30" />
-              <Text style={{
+            <Text style={{
                 color: '#FF3B30',
-                fontWeight: 'bold',
+              fontWeight: 'bold',
                 fontSize: 16,
                 marginLeft: 16,
                 textAlign: 'left',
                 flex: 1,
               }}>
                 Delete Message History
-              </Text>
+            </Text>
             </TouchableOpacity>
             
               <TouchableOpacity
-              style={{
+                style={{
                 flexDirection: 'row',
                 alignItems: 'center',
                 paddingVertical: 16,
@@ -758,7 +758,7 @@ const ChatScreen = ({ navigation, route }) => {
               onPress={() => setShowOptionsModal(false)}
             >
               <Ionicons name="close-outline" size={20} color={isDarkMode ? '#FFFFFF' : '#000000'} />
-              <Text style={{
+                <Text style={{
                 color: isDarkMode ? '#FFFFFF' : '#000000',
                 fontSize: 16,
                 marginLeft: 16,
