@@ -10,6 +10,79 @@ export const useAIStore = create((set, get) => ({
   userInterests: [],
   loading: false,
   error: null,
+  generatedCaptions: [],
+
+  // Generate AI captions for stories or snaps
+  generateCaptions: async (mediaType, context = '', mood = 'fun', friendIds = []) => {
+    try {
+      console.log('🤖 AIStore: Generating captions with context:', { mediaType, context, mood, friendIds });
+      set({ loading: true, error: null, generatedCaptions: [] });
+  
+      const { user } = useSupabaseAuthStore.getState();
+      const userId = user?.uid || user?.id;
+  
+      if (!userId) {
+        console.warn('🤖 AIStore: User not authenticated, using fallback captions');
+        const fallbackCaptions = get().getFallbackCaptions(mood);
+        set({
+          generatedCaptions: fallbackCaptions,
+          loading: false,
+          error: 'User not authenticated',
+        });
+        return fallbackCaptions;
+      }
+  
+      console.log('🤖 AIStore: Calling caption-generator Edge Function...');
+      const { data, error } = await supabase.functions.invoke('caption-generator', {
+        body: {
+          userId,
+          friendIds,
+          mediaType,
+          context,
+          mood,
+        },
+      });
+  
+      if (error) {
+        console.error('🤖 AIStore: Error from caption generator Edge Function:', error);
+        throw error;
+      }
+  
+      if (!data || !data.captions || data.captions.length === 0) {
+        console.warn('🤖 AIStore: No captions returned from Edge Function, using fallback');
+        throw new Error('No captions generated');
+      }
+  
+      let cleanedCaptions = data.captions
+        .map(caption =>
+          caption
+            .replace(/^\d+[\.\)\-\:]?\s*/, '')
+            .replace(/^[\-\*\+]\s*/, '')
+            .replace(/^["']|["']$/g, '')
+            .trim()
+        )
+        .filter(caption => caption && caption.length > 0);
+  
+      console.log('🤖 AIStore: Successfully generated clean captions:', cleanedCaptions);
+      set({
+        generatedCaptions: cleanedCaptions,
+        loading: false,
+        error: null,
+      });
+  
+      return cleanedCaptions;
+    } catch (error) {
+      console.error('🤖 AIStore: Error generating captions:', error);
+      const fallbackCaptions = get().getFallbackCaptions(mood);
+      console.log('🤖 AIStore: Using fallback captions:', fallbackCaptions);
+      set({
+        generatedCaptions: fallbackCaptions,
+        error: `AI service unavailable: ${error.message}`,
+        loading: false,
+      });
+      return fallbackCaptions;
+    }
+  },
 
   // Clear AI recommendations
   clearGroupRecommendations: () => {
@@ -127,8 +200,6 @@ export const useAIStore = create((set, get) => ({
       return fallbackActivities;
     }
   },
-
-
 
   // Get AI-powered suggestions for group name and interests
   getGroupDetailsRecommendations: async (memberIds, forceRefresh = false) => {
