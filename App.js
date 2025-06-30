@@ -15,6 +15,7 @@ import FindFriendsScreen from './src/screens/FindFriendsScreen';
 import DiscoverScreen from './src/screens/DiscoverScreen';
 import GroupChatScreen from './src/screens/GroupChatScreen';
 import CreateGroupChatScreen from './src/screens/CreateGroupChatScreen';
+import OnboardingScreen from './src/screens/OnboardingScreen';
 import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -71,83 +72,87 @@ export default function App() {
           }}
         >
           {user ? (
-            <>
-              {console.log('📱 App.js: Rendering authenticated screens')}
-              <Stack.Screen name="MainTabs" component={MainTabNavigator} />
-              <Stack.Screen 
-                name="Camera" 
-                component={CameraScreen}
-                options={{ 
-                  presentation: 'fullScreenModal',
-                  animationTypeForReplace: 'push',
-                  gestureEnabled: false
-                }}
-              />
-              <Stack.Screen 
-                name="Profile" 
-                component={ProfileScreen}
-                options={{ 
-                  presentation: 'card',
-                  gestureEnabled: true
-                }}
-              />
-              <Stack.Screen 
-                name="Chat" 
-                component={ChatScreen}
-                options={{ 
-                  presentation: 'card',
-                  gestureEnabled: true
-                }}
-              />
-              <Stack.Screen 
-                name="StoryView" 
-                component={StoryViewScreen}
-                options={{ 
-                  presentation: 'fullScreenModal',
-                  gestureEnabled: true
-                }}
-              />
-              <Stack.Screen 
-                name="Friends" 
-                component={FriendsScreen}
-                options={{ 
-                  presentation: 'card',
-                  gestureEnabled: true
-                }}
-              />
-              <Stack.Screen 
-                name="FindFriends" 
-                component={FindFriendsScreen}
-                options={{ 
-                  presentation: 'card',
-                  gestureEnabled: true
-                }}
-              />
-              <Stack.Screen 
-                name="Discover" 
-                component={DiscoverScreen}
-                options={{ 
-                  presentation: 'card',
-                  gestureEnabled: true
-                }}
-              />
-              <Stack.Screen 
-                name="GroupChat" 
-                component={GroupChatScreen}
-                options={{ 
-                  presentation: 'card',
-                  gestureEnabled: true
-                }}
-              />
-              <Stack.Screen 
-                name="CreateGroupChat" 
-                component={CreateGroupChatScreen}
-                options={{ 
-                  presentation: 'modal',
-                  gestureEnabled: true
-                }}
-              />
-            </>
+            user.user_metadata?.onboarding_completed ? (
+              <>
+                {console.log('📱 App.js: Rendering authenticated screens')}
+                <Stack.Screen name="MainTabs" component={MainTabNavigator} />
+                <Stack.Screen 
+                  name="Camera" 
+                  component={CameraScreen}
+                  options={{ 
+                    presentation: 'fullScreenModal',
+                    animationTypeForReplace: 'push',
+                    gestureEnabled: false
+                  }}
+                />
+                <Stack.Screen 
+                  name="Profile" 
+                  component={ProfileScreen}
+                  options={{ 
+                    presentation: 'card',
+                    gestureEnabled: true
+                  }}
+                />
+                <Stack.Screen 
+                  name="Chat" 
+                  component={ChatScreen}
+                  options={{ 
+                    presentation: 'card',
+                    gestureEnabled: true
+                  }}
+                />
+                <Stack.Screen 
+                  name="StoryView" 
+                  component={StoryViewScreen}
+                  options={{ 
+                    presentation: 'fullScreenModal',
+                    gestureEnabled: true
+                  }}
+                />
+                <Stack.Screen 
+                  name="Friends" 
+                  component={FriendsScreen}
+                  options={{ 
+                    presentation: 'card',
+                    gestureEnabled: true
+                  }}
+                />
+                <Stack.Screen 
+                  name="FindFriends" 
+                  component={FindFriendsScreen}
+                  options={{ 
+                    presentation: 'card',
+                    gestureEnabled: true
+                  }}
+                />
+                <Stack.Screen 
+                  name="Discover" 
+                  component={DiscoverScreen}
+                  options={{ 
+                    presentation: 'card',
+                    gestureEnabled: true
+                  }}
+                />
+                <Stack.Screen 
+                  name="GroupChat" 
+                  component={GroupChatScreen}
+                  options={{ 
+                    presentation: 'card',
+                    gestureEnabled: true
+                  }}
+                />
+                <Stack.Screen 
+                  name="CreateGroupChat" 
+                  component={CreateGroupChatScreen}
+                  options={{ 
+                    presentation: 'modal',
+                    gestureEnabled: true
+                  }}
+                />
+              </>
+            ) : (
+              <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+            )
           ) : (
             <>
               {console.log('📱 App.js: Rendering auth screen')}

@@ -35,6 +35,7 @@ export const useSupabaseAuthStore = create((set, get) => ({
         }
 
         const userData = {
+          ...session.user,
           id: session.user.id,
           uid: session.user.id,
           email: session.user.email,
@@ -65,6 +66,7 @@ export const useSupabaseAuthStore = create((set, get) => ({
           }
 
           const userData = {
+            ...session.user,
             id: session.user.id,
             uid: session.user.id,
             email: session.user.email,
@@ -160,6 +162,35 @@ export const useSupabaseAuthStore = create((set, get) => ({
     }
   },
 
+  // Complete onboarding
+  completeOnboarding: async () => {
+    console.log('🟢 SupabaseAuthStore: completeOnboarding called');
+    const { user } = get();
+    if (!user) return;
+
+    try {
+      set({ loading: true, error: null });
+      const { data, error } = await supabase.auth.updateUser({
+        data: { onboarding_completed: true }
+      });
+
+      if (error) {
+        console.error('🟢 SupabaseAuthStore: completeOnboarding error:', error);
+        set({ error: error.message, loading: false });
+        return;
+      }
+
+      if (data.user) {
+        const updatedUser = { ...get().user, ...data.user };
+        console.log('🟢 SupabaseAuthStore: Onboarding completed, updated user:', updatedUser);
+        set({ user: updatedUser, loading: false });
+      }
+    } catch (error) {
+      console.error('🟢 SupabaseAuthStore: completeOnboarding error:', error);
+      set({ error: 'An unexpected error occurred during onboarding.', loading: false });
+    }
+  },
+
   // Sign up user
   signUp: async (email, password, username) => {
     console.log('🟢 SupabaseAuthStore: signUp called for:', email, 'username:', username);
@@ -191,6 +222,7 @@ export const useSupabaseAuthStore = create((set, get) => ({
           data: {
             username: username,
             display_name: username,
+            onboarding_completed: false,
           }
         }
       });
@@ -232,6 +264,7 @@ export const useSupabaseAuthStore = create((set, get) => ({
         console.log('🟢 SupabaseAuthStore: User profile created successfully');
         
         const finalUserData = {
+          ...data.user,
           id: data.user.id,
           uid: data.user.id,
           email: data.user.email,
@@ -250,7 +283,9 @@ export const useSupabaseAuthStore = create((set, get) => ({
       
     } catch (error) {
       console.error('🟢 SupabaseAuthStore: signUp error:', error);
-      set({ error: error.message, loading: false });
+      const errorMessage = 'An unexpected error occurred. Please try again.';
+      set({ error: errorMessage, loading: false });
+      return { success: false, error: errorMessage };
     }
   },
 
