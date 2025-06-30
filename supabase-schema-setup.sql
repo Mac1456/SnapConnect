@@ -226,10 +226,10 @@ CREATE TRIGGER update_group_chats_updated_at BEFORE UPDATE ON group_chats
 
 -- Insert test users
 INSERT INTO users (id, email, username, display_name, profile_picture, bio, onboarding_completed) VALUES
-('01832a3f-a9f3-4158-8053-bfed0a3d94d2', 'mustafa.chaudheri@gmail.com', 'mustafa.chaudheri', 'Mac1456', null, 'App developer and tech enthusiast', true),
-('c65e40c4-ef3c-4d8f-80b2-6d6b40dd755f', 'alice.cooper@test.com', 'alice_cooper', 'Alice Cooper', null, 'Love photography and travel', false),
-('41bf2926-cc97-4c88-b166-cb77ab304c8f', 'bob.wilson@test.com', 'bob_wilson', 'Bob Wilson', null, 'Fitness enthusiast and foodie', false),
-('7f8e9d10-1234-5678-9abc-def012345678', 'charlie.brown@test.com', 'charlie_brown', 'Charlie Brown', null, 'Music lover and artist', false)
+('01832a3f-a9f3-4158-8053-bfed0a3d94d2'::uuid, 'mustafa.chaudheri@gmail.com', 'mustafa.chaudheri', 'Mac1456', null, 'App developer and tech enthusiast', true),
+('c65e40c4-ef3c-4d8f-80b2-6d6b40dd755f'::uuid, 'alice.cooper@test.com', 'alice_cooper', 'Alice Cooper', null, 'Love photography and travel', false),
+('41bf2926-cc97-4c88-b166-cb77ab304c8f'::uuid, 'bob.wilson@test.com', 'bob_wilson', 'Bob Wilson', null, 'Fitness enthusiast and foodie', false),
+('7f8e9d10-1234-5678-9abc-def012345678'::uuid, 'charlie.brown@test.com', 'charlie_brown', 'Charlie Brown', null, 'Music lover and artist', false)
 ON CONFLICT (id) DO UPDATE SET
     email = EXCLUDED.email,
     username = EXCLUDED.username,
@@ -239,19 +239,19 @@ ON CONFLICT (id) DO UPDATE SET
 
 -- Create some friendships
 INSERT INTO friendships (user_id, friend_id) VALUES
-('01832a3f-a9f3-4158-8053-bfed0a3d94d2', 'c65e40c4-ef3c-4d8f-80b2-6d6b40dd755f'),
-('c65e40c4-ef3c-4d8f-80b2-6d6b40dd755f', '01832a3f-a9f3-4158-8053-bfed0a3d94d2'),
-('01832a3f-a9f3-4158-8053-bfed0a3d94d2', '41bf2926-cc97-4c88-b166-cb77ab304c8f'),
-('41bf2926-cc97-4c88-b166-cb77ab304c8f', '01832a3f-a9f3-4158-8053-bfed0a3d94d2'),
-('c65e40c4-ef3c-4d8f-80b2-6d6b40dd755f', '41bf2926-cc97-4c88-b166-cb77ab304c8f'),
-('41bf2926-cc97-4c88-b166-cb77ab304c8f', 'c65e40c4-ef3c-4d8f-80b2-6d6b40dd755f')
+('01832a3f-a9f3-4158-8053-bfed0a3d94d2'::uuid, 'c65e40c4-ef3c-4d8f-80b2-6d6b40dd755f'::uuid),
+('c65e40c4-ef3c-4d8f-80b2-6d6b40dd755f'::uuid, '01832a3f-a9f3-4158-8053-bfed0a3d94d2'::uuid),
+('01832a3f-a9f3-4158-8053-bfed0a3d94d2'::uuid, '41bf2926-cc97-4c88-b166-cb77ab304c8f'::uuid),
+('41bf2926-cc97-4c88-b166-cb77ab304c8f'::uuid, '01832a3f-a9f3-4158-8053-bfed0a3d94d2'::uuid),
+('c65e40c4-ef3c-4d8f-80b2-6d6b40dd755f'::uuid, '41bf2926-cc97-4c88-b166-cb77ab304c8f'::uuid),
+('41bf2926-cc97-4c88-b166-cb77ab304c8f'::uuid, 'c65e40c4-ef3c-4d8f-80b2-6d6b40dd755f'::uuid)
 ON CONFLICT (user_id, friend_id) DO NOTHING;
 
 -- Create a test group chat
 INSERT INTO group_chats (id, name, description, creator_id, admin_ids, member_ids) VALUES
-('a6cb075a-5bb7-47c9-84d2-cf03b681664f', 'Test Group', 'A test group chat', '01832a3f-a9f3-4158-8053-bfed0a3d94d2', 
- ARRAY['01832a3f-a9f3-4158-8053-bfed0a3d94d2'], 
- ARRAY['01832a3f-a9f3-4158-8053-bfed0a3d94d2', 'c65e40c4-ef3c-4d8f-80b2-6d6b40dd755f', '41bf2926-cc97-4c88-b166-cb77ab304c8f'])
+('a6cb075a-5bb7-47c9-84d2-cf03b681664f', 'Test Group', 'A test group chat', '01832a3f-a9f3-4158-8053-bfed0a3d94d2'::uuid, 
+ ARRAY['01832a3f-a9f3-4158-8053-bfed0a3d94d2'::uuid], 
+ ARRAY['01832a3f-a9f3-4158-8053-bfed0a3d94d2'::uuid, 'c65e40c4-ef3c-4d8f-80b2-6d6b40dd755f'::uuid, '41bf2926-cc97-4c88-b166-cb77ab304c8f'::uuid])
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     description = EXCLUDED.description,
