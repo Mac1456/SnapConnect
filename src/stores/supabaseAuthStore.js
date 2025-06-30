@@ -35,11 +35,13 @@ export const useSupabaseAuthStore = create((set, get) => ({
         }
 
         const userData = {
+          id: session.user.id,
           uid: session.user.id,
           email: session.user.email,
           ...profile,
         };
 
+        console.log('🟢 SupabaseAuthStore: Setting user data in checkAuthState:', userData);
         set({ user: userData, loading: false, error: null });
       } else {
         console.log('🟢 SupabaseAuthStore: No active session');
@@ -63,11 +65,13 @@ export const useSupabaseAuthStore = create((set, get) => ({
           }
 
           const userData = {
+            id: session.user.id,
             uid: session.user.id,
             email: session.user.email,
             ...profile,
           };
 
+          console.log('🟢 SupabaseAuthStore: Setting user data in onAuthStateChange:', userData);
           set({ user: userData, loading: false, error: null });
         } else if (event === 'SIGNED_OUT') {
           set({ user: null, loading: false, error: null });
@@ -227,17 +231,19 @@ export const useSupabaseAuthStore = create((set, get) => ({
 
         console.log('🟢 SupabaseAuthStore: User profile created successfully');
         
+        const finalUserData = {
+          id: data.user.id,
+          uid: data.user.id,
+          email: data.user.email,
+          username: username,
+          display_name: username,
+          profile_picture: null
+        };
+
         // Update the user object with profile data
+        console.log('🟢 SupabaseAuthStore: Setting final user data after signUp:', finalUserData);
         set({ 
-          user: {
-            uid: data.user.id,
-            email: data.user.email,
-            username: username,
-            displayName: username,  // Set displayName to username
-            display_name: username, // Also set snake_case version
-            profilePicture: null,
-            profile_picture: null
-          },
+          user: finalUserData,
           loading: false 
         });
       }

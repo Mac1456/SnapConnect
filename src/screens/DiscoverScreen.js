@@ -97,16 +97,22 @@ const DiscoverScreen = ({ navigation }) => {
   ];
 
   const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
+    if (!searchQuery.trim() || !user?.id) {
+      // Don't search if there's no query or if the user object isn't ready
+      if (!user?.id) {
+        console.warn('🔍 DiscoverScreen: handleSearch called, but no user ID is available yet.');
+      }
+      return;
+    }
     
     try {
       setLoading(true);
-      const results = await searchUsers(searchQuery.trim());
+      // Pass the user ID directly to the store function
+      const results = await searchUsers(searchQuery.trim(), user.id);
       
-      // Map the results to the expected format and filter out current user
-      const mappedResults = results
-        .filter(u => u.id !== user.uid)
-        .map(u => ({
+      // Map the results to the expected format
+      // The store should already be filtering out the current user, but this is a good safeguard
+      const mappedResults = results.map(u => ({
           id: u.id,
           username: u.username,
           displayName: u.display_name || u.username || u.email?.split('@')[0] || 'Unknown User',
@@ -124,16 +130,26 @@ const DiscoverScreen = ({ navigation }) => {
     }
   };
 
-  const handleSendFriendRequest = async (targetUser) => {
+  const handleSendFriendRequest = async (targetId) => {
+    if (!user?.id) {
+      Alert.alert('Error', 'You must be logged in to send a friend request.');
+      return;
+    }
+    if (!targetId) {
+      Alert.alert('Error', 'The target user is invalid.');
+      return;
+    }
+
     try {
       setLoading(true);
-      console.log('🔍 DiscoverScreen: Sending friend request to user object:', JSON.stringify(targetUser, null, 2));
+      console.log(`🔍 DiscoverScreen: Sending friend request to user ID: ${targetId}`);
       
-      await sendFriendRequest(targetUser);
+      // Pass the recipient ID and the current user's ID to the store
+      await sendFriendRequest(targetId, user.id);
       
       Alert.alert(
         'Success', 
-        `Friend request sent to @${targetUser.username}!`,
+        `Friend request sent!`,
         [{ text: 'OK' }]
       );
     } catch (error) {
@@ -222,7 +238,7 @@ const DiscoverScreen = ({ navigation }) => {
             paddingVertical: 8,
             borderRadius: 20,
           }}
-          onPress={() => handleSendFriendRequest(item)}
+          onPress={() => handleSendFriendRequest(item.id)}
         >
           <Ionicons name="person-add" size={16} color={currentTheme.colors.background} />
         </TouchableOpacity>

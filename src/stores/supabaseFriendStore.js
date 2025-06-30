@@ -27,16 +27,21 @@ export const useSupabaseFriendStore = create((set, get) => ({
   error: null,
 
   // A helper function to get the current user's ID.
+  // It's placed here so other store functions can access it via get().
   _getCurrentUserId: () => {
     const { user } = useSupabaseAuthStore.getState();
+    console.log(`🟡 FriendStore: _getCurrentUserId called. Auth store user state:`, user ? `User ID: ${user.id}` : 'null');
+    if (!user) {
+      console.warn('🟡 FriendStore: _getCurrentUserId found no user in auth store.');
+    }
     return user?.id || null;
   },
 
   // Search for users to add as friends.
-  searchUsers: async (searchQuery) => {
+  searchUsers: async (searchQuery, userId) => {
     set({ loading: true, error: null });
     try {
-      const currentUserId = get()._getCurrentUserId();
+      const currentUserId = userId || get()._getCurrentUserId();
       if (!currentUserId) {
         throw new Error('User not authenticated');
       }
@@ -62,30 +67,27 @@ export const useSupabaseFriendStore = create((set, get) => ({
   },
 
   // Send a friend request to another user.
-  sendFriendRequest: async (targetUser) => {
-      set({ loading: true, error: null });
-    const { user: currentUser } = useSupabaseAuthStore.getState();
-
+  sendFriendRequest: async (recipientId, userId) => {
+    set({ loading: true, error: null });
     try {
-      if (!currentUser) throw new Error('Current user not authenticated.');
-      if (!targetUser?.id || !targetUser?.username) {
-        throw new Error('Target user data is invalid.');
+      const currentUserId = userId || get()._getCurrentUserId();
+      if (!currentUserId) {
+        throw new Error('User not authenticated');
+      }
+      if (currentUserId === recipientId) {
+        throw new Error("You can't send a friend request to yourself.");
       }
 
-      console.log(`🟢 FriendStore: Attempting to send friend request from ${currentUser.id} to ${targetUser.id}`);
-
-      const requestPayload = {
-        requester_id: currentUser.id,
-        requested_id: targetUser.id,
-        requester_username: currentUser.user_metadata?.username || currentUser.email.split('@')[0],
-        requester_display_name: currentUser.user_metadata?.display_name || currentUser.user_metadata?.username || 'A new friend',
-      };
-
-      console.log('🟢 FriendStore: Sending payload:', JSON.stringify(requestPayload, null, 2));
-
+      console.log(`🟢 FriendStore: Sending friend request from ${currentUserId} to ${recipientId}`);
+      
       const { data, error } = await supabase
         .from('friend_requests')
-        .insert(requestPayload)
+        .insert({
+          requester_id: currentUserId,
+          requested_id: recipientId,
+          requester_username: currentUserId,
+          requester_display_name: currentUserId,
+        })
         .select();
 
       if (error) {
@@ -100,7 +102,6 @@ export const useSupabaseFriendStore = create((set, get) => ({
       console.log('🟢 FriendStore: Friend request sent successfully. Response:', data);
       set({ loading: false });
       return data;
-      
     } catch (error) {
       console.error('🔴 FriendStore: sendFriendRequest error:', error.message);
       if (error.code) {
@@ -112,40 +113,46 @@ export const useSupabaseFriendStore = create((set, get) => ({
   },
 
   // Accept a friend request using the new RPC function.
-  acceptFriendRequest: async (request) => {
-      set({ loading: true, error: null });
+  acceptFriendRequest: async (requestId, senderId, userId) => {
+    set({ loading: true, error: null });
     try {
-      const currentUserId = get()._getCurrentUserId();
-      if (!currentUserId || !request) {
-        throw new Error('User or request is invalid.');
+      const currentUserId = userId || get()._getCurrentUserId();
+      if (!currentUserId) {
+        throw new Error('User not authenticated');
       }
 
-      console.log('🟢 FriendStore: Accepting friend request ID:', request.id);
+      console.log(`🟢 FriendStore: User ${currentUserId} accepting friend request ${requestId} from ${senderId}`);
       const { error } = await supabase.rpc('accept_friend_request', {
-        request_id: request.id,
+        request_id: requestId,
         user1_id: currentUserId,
-        user2_id: request.requester_id,
+        user2_id: senderId
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('🔴 FriendStore: Full error object from Supabase:', JSON.stringify(error, null, 2));
+        throw error;
+      }
 
       console.log('🟢 FriendStore: Friend request accepted successfully.');
-      // Refresh friends and requests lists
-      get().getFriends();
-      get().getFriendRequests();
-      set({ loading: false });
-      
+      // Refresh both friends and friend requests lists
+      get().getFriends(currentUserId);
+      get().getFriendRequests(currentUserId);
     } catch (error) {
-      console.error('🔴 FriendStore: acceptFriendRequest error:', error.message);
-      set({ error: 'Failed to accept friend request.', loading: false });
+      console.error('🔴 FriendStore: acceptFriendRequest error:', error);
+      set({ error: error.message });
     }
   },
 
   // Reject (or cancel) a friend request.
-  rejectFriendRequest: async (requestId) => {
-      set({ loading: true, error: null });
+  rejectFriendRequest: async (requestId, userId) => {
+    set({ loading: true, error: null });
     try {
-      console.log('🟢 FriendStore: Rejecting friend request ID:', requestId);
+      const currentUserId = userId || get()._getCurrentUserId();
+      if (!currentUserId) {
+        throw new Error('User not authenticated');
+      }
+
+      console.log(`🟢 FriendStore: User ${currentUserId} rejecting friend request ${requestId}`);
       const { error } = await supabase
         .from('friend_requests')
         .delete()
@@ -154,25 +161,28 @@ export const useSupabaseFriendStore = create((set, get) => ({
       if (error) throw error;
 
       console.log('🟢 FriendStore: Friend request rejected successfully.');
-      // Refresh requests list
-      set(state => ({
-        friendRequests: state.friendRequests.filter(req => req.id !== requestId),
-        loading: false
-      }));
-      
+      // Refresh friend requests list
+      get().getFriendRequests(currentUserId);
     } catch (error) {
-      console.error('🔴 FriendStore: rejectFriendRequest error:', error.message);
-      set({ error: 'Failed to reject friend request.', loading: false });
+      console.error('🔴 FriendStore: rejectFriendRequest error:', error);
+      set({ error: error.message });
     }
   },
 
-  // Get the current user's list of friends.
-  getFriends: async () => {
+  // Fetch the current user's friends list.
+  // Now accepts an optional userId to prevent race conditions on startup.
+  getFriends: async (userId) => {
     set({ loading: true, error: null });
     try {
-      const currentUserId = get()._getCurrentUserId();
+      // Use the provided userId first, otherwise try to get it from auth.
+      const currentUserId = userId || get()._getCurrentUserId();
+
       if (!currentUserId) {
-        throw new Error('User not authenticated');
+        // This is now a handled state, not an exception.
+        const errorMessage = 'User not authenticated';
+        console.error('🔴 FriendStore: getFriends error:', errorMessage);
+        set({ loading: false, error: errorMessage });
+        return; // Exit gracefully
       }
 
       console.log('🟢 FriendStore: Fetching friends for user:', currentUserId);
@@ -182,7 +192,7 @@ export const useSupabaseFriendStore = create((set, get) => ({
         .eq('user_id', currentUserId);
 
       if (error) throw error;
-
+      
       const friends = data.map(item => item.friend) || [];
       console.log('🟢 FriendStore: Found', friends.length, 'friends.');
       set({ friends, loading: false });
@@ -192,14 +202,14 @@ export const useSupabaseFriendStore = create((set, get) => ({
       console.error('🔴 FriendStore: getFriends error:', error.message);
       set({ error: error.message, loading: false });
       return [];
-      }
+    }
   },
 
   // Get all incoming friend requests for the current user.
-  getFriendRequests: async () => {
+  getFriendRequests: async (userId) => {
     set({ loading: true, error: null });
     try {
-      const currentUserId = get()._getCurrentUserId();
+      const currentUserId = userId || get()._getCurrentUserId();
       if (!currentUserId) {
         throw new Error('User not authenticated');
       }

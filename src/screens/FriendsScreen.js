@@ -47,14 +47,18 @@ export default function FriendsScreen({ navigation }) {
         unsubscribe();
       }
     };
-  }, []); // Empty dependency array ensures this runs once on mount
+  }, [user]); // Add user to dependency array to reload data if user changes
 
   const loadData = async () => {
-    // The store now handles the user ID automatically
-      await Promise.all([
-      getFriends(),
-      getFriendRequests()
-      ]);
+    if (!user?.id) {
+      console.warn('FriendsScreen: loadData called without a user ID.');
+      return;
+    }
+    // Pass the user ID to the store functions
+    await Promise.all([
+      getFriends(user.id),
+      getFriendRequests(user.id)
+    ]);
   };
 
   const onRefresh = async () => {
@@ -73,8 +77,12 @@ export default function FriendsScreen({ navigation }) {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-    try {
-              await removeFriend(friend.id);
+            if (!user?.id) {
+              Alert.alert('Error', 'You must be logged in to remove a friend.');
+              return;
+            }
+            try {
+              await removeFriend(friend.id, user.id);
               Alert.alert('Success', `${friend.displayName || friend.username} has been removed.`);
               // The store will auto-refresh, but this can feel more responsive
               loadData(); 
@@ -88,9 +96,12 @@ export default function FriendsScreen({ navigation }) {
   };
 
   const handleAcceptRequest = async (request) => {
+    if (!user?.id || !request?.requester?.id) {
+      Alert.alert('Error', 'Cannot accept request due to missing data.');
+      return;
+    }
     try {
-      // The new function expects the entire request object
-      await acceptFriendRequest(request);
+      await acceptFriendRequest(request.id, request.requester.id, user.id);
       Alert.alert('Success', 'Friend request accepted!');
       // Data will refresh automatically via the listener, but a manual refresh can be faster
       await loadData(); 
@@ -100,6 +111,10 @@ export default function FriendsScreen({ navigation }) {
   };
 
   const handleRejectRequest = async (requestId) => {
+    if (!user?.id) {
+      Alert.alert('Error', 'You must be logged in to reject a request.');
+      return;
+    }
     Alert.alert(
       'Reject Friend Request',
       'Are you sure you want to reject this friend request?',
@@ -110,8 +125,7 @@ export default function FriendsScreen({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              // The new function expects just the request ID
-              await rejectFriendRequest(requestId);
+              await rejectFriendRequest(requestId, user.id);
               Alert.alert('Success', 'Friend request rejected');
               // Data will refresh automatically via the listener
               await loadData();
