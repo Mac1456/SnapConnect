@@ -425,7 +425,12 @@ const GroupChatScreen = ({ route }) => {
   const navigation = useNavigation();
   const { group } = route.params || {};
   
-  console.log('💬 GroupChatScreen: Initialized with group:', group?.id, group?.name);
+  console.log('💬 GroupChatScreen: 🚀 Component initialized:', {
+    routeGroupId: group?.id,
+    routeGroupName: group?.name,
+    hasRouteParams: !!route.params,
+    routeParamsKeys: route.params ? Object.keys(route.params) : []
+  });
   
   const { user } = useAuthStore();
   const { colors } = useTheme();
@@ -438,6 +443,7 @@ const GroupChatScreen = ({ route }) => {
     currentGroupChat,
     groupMessages,
     loading,
+    error,
     loadGroupMessages,
     sendGroupMessage,
     setupGroupMessageSubscription,
@@ -461,38 +467,29 @@ const GroupChatScreen = ({ route }) => {
   const [timerSeconds, setTimerSeconds] = useState(10);
   const [showAISuggestions, setShowAISuggestions] = useState(false);
 
-
   const flatListRef = useRef(null);
   const currentUserId = user?.id;
 
-  console.log('💬 GroupChatScreen: Current user ID:', currentUserId);
-  console.log('💬 GroupChatScreen: Current group chat:', currentGroupChat?.id);
-  console.log('💬 GroupChatScreen: 📨 Messages count:', groupMessages?.length || 0);
-  
-  // Log when messages change
-  useEffect(() => {
-    if (groupMessages?.length > 0) {
-      console.log('💬 GroupChatScreen: 📨 Messages updated:', groupMessages.map(m => ({
-        id: m.id,
-        text: m.text?.substring(0, 20) + '...',
-        sender: m.senderName,
-        timestamp: m.timestamp?.toLocaleTimeString()
-      })));
-    }
-  }, [groupMessages]);
+  console.log('💬 GroupChatScreen: 🚀 Initial state check:', {
+    currentUserId,
+    currentGroupChatId: currentGroupChat?.id,
+    groupChatsCount: groupChats?.length || 0,
+    messagesCount: groupMessages?.length || 0,
+    loading,
+    error: !!error
+  });
 
-  // Log when member details change
+  // Track when group chats are loaded
   useEffect(() => {
-    if (memberDetails?.length > 0) {
-      console.log('💬 GroupChatScreen: 👥 Member details updated:', {
-        count: memberDetails.length,
-        members: memberDetails.map(m => ({ id: m.id, name: m.display_name || m.name })),
-        groupId: currentGroupChat?.id,
-        groupMemberIds: currentGroupChat?.member_ids,
-        groupUpdatedAt: currentGroupChat?.updated_at
-      });
-    }
-  }, [memberDetails, currentGroupChat?.member_ids, currentGroupChat?.updated_at]);
+    console.log('💬 GroupChatScreen: 📋 Group chats changed:', {
+      groupChatsCount: groupChats?.length || 0,
+      groupChats: groupChats?.map(gc => ({
+        id: gc.id,
+        name: gc.name,
+        memberCount: gc.member_ids?.length || 0
+      })) || []
+    });
+  }, [groupChats]);
 
   // Track when current group chat changes
   useEffect(() => {
@@ -503,43 +500,116 @@ const GroupChatScreen = ({ route }) => {
         memberCount: currentGroupChat.member_ids?.length || 0,
         updatedAt: currentGroupChat.updated_at
       });
+    } else {
+      console.log('💬 GroupChatScreen: 🔄 Current group chat cleared');
     }
   }, [currentGroupChat]);
 
+  // Track when group messages change
+  useEffect(() => {
+    console.log('💬 GroupChatScreen: 📨 Group messages changed:', {
+      messagesCount: groupMessages?.length || 0,
+      currentGroupChatId: currentGroupChat?.id,
+      loading,
+      error,
+      firstMessage: groupMessages?.[0] ? {
+        id: groupMessages[0].id,
+        text: groupMessages[0].text?.substring(0, 30) + '...',
+        senderName: groupMessages[0].senderName,
+        timestamp: groupMessages[0].timestamp?.toISOString()
+      } : null,
+      lastMessage: groupMessages?.length > 0 ? {
+        id: groupMessages[groupMessages.length - 1].id,
+        text: groupMessages[groupMessages.length - 1].text?.substring(0, 30) + '...',
+        senderName: groupMessages[groupMessages.length - 1].senderName,
+        timestamp: groupMessages[groupMessages.length - 1].timestamp?.toISOString()
+      } : null
+    });
+  }, [groupMessages, currentGroupChat?.id, loading, error]);
+
   // Set current group chat when component mounts or group changes
   useEffect(() => {
+    console.log('💬 GroupChatScreen: 🎯 useEffect triggered for group selection:', {
+      hasRouteGroup: !!group,
+      routeGroupId: group?.id,
+      routeGroupName: group?.name,
+      groupChatsCount: groupChats?.length || 0,
+      groupChatsIds: groupChats?.map(g => g.id) || []
+    });
+    
     if (group) {
-      console.log('💬 GroupChatScreen: Setting current group chat:', group.id);
+      console.log('💬 GroupChatScreen: 🎯 Setting current group chat from route:', {
+        id: group.id,
+        name: group.name,
+        memberCount: group.member_ids?.length || 0
+      });
       setCurrentGroupChat(group);
     } else if (groupChats?.length > 0) {
-      console.log('💬 GroupChatScreen: Auto-selecting first group chat from the list.');
+      console.log('💬 GroupChatScreen: 🎯 Auto-selecting first group chat:', {
+        id: groupChats[0].id,
+        name: groupChats[0].name,
+        memberCount: groupChats[0].member_ids?.length || 0
+      });
       setCurrentGroupChat(groupChats[0]);
+    } else {
+      console.log('💬 GroupChatScreen: 🎯 No group to select (no route group, no group chats available)');
     }
     
+    // Don't automatically clear current group chat on component cleanup
+    // This was causing the flickering issue by clearing messages unnecessarily
     return () => {
-      console.log('💬 GroupChatScreen: Clearing current group chat on unmount');
-      clearCurrentGroupChat();
+      console.log('💬 GroupChatScreen: 🎯 Cleanup: Component unmounting, but preserving current group chat state');
+      // Don't clear anything here - let the focus/blur handle navigation cleanup
     };
-  }, [group, groupChats, setCurrentGroupChat, clearCurrentGroupChat]);
+  }, [group, groupChats, setCurrentGroupChat]);
 
   // Load messages when current group chat changes
   useEffect(() => {
+    console.log('💬 GroupChatScreen: 📥 Message loading useEffect triggered:', {
+      currentGroupChatId: currentGroupChat?.id,
+      currentGroupChatName: currentGroupChat?.name,
+      hasLoadGroupMessages: typeof loadGroupMessages === 'function',
+      hasSetupSubscription: typeof setupGroupMessageSubscription === 'function'
+    });
+    
     if (currentGroupChat?.id) {
-      console.log('💬 GroupChatScreen: 📥 Loading messages for group:', currentGroupChat.id);
+      console.log('💬 GroupChatScreen: 📥 Starting message loading process for group:', currentGroupChat.id);
       
       // Load messages with retry mechanism
       const loadWithRetry = async (retryCount = 0) => {
         try {
-          await loadGroupMessages(currentGroupChat.id);
-          console.log('💬 GroupChatScreen: 📥 Messages loaded successfully');
+          console.log(`💬 GroupChatScreen: 📥 Loading messages attempt ${retryCount + 1}...`);
+          const startTime = Date.now();
+          
+          const messages = await loadGroupMessages(currentGroupChat.id);
+          
+          const loadTime = Date.now() - startTime;
+          console.log('💬 GroupChatScreen: 📥 Messages loaded successfully:', {
+            loadTime: loadTime + 'ms',
+            messagesCount: messages?.length || 0,
+            retryCount,
+            messages: messages?.map(msg => ({
+              id: msg.id,
+              text: msg.text?.substring(0, 30) + '...',
+              senderName: msg.senderName
+            })) || []
+          });
+          
         } catch (error) {
-          console.error('❌ GroupChatScreen: 📥 Error loading messages:', error);
+          console.error('❌ GroupChatScreen: 📥 Error loading messages:', {
+            error: error.message,
+            stack: error.stack,
+            retryCount,
+            groupId: currentGroupChat.id
+          });
           
           // Retry up to 3 times with increasing delay
           if (retryCount < 3) {
             const delay = (retryCount + 1) * 1000; // 1s, 2s, 3s
-            console.log(`💬 GroupChatScreen: 📥 Retrying message load in ${delay}ms (attempt ${retryCount + 1}/3)`);
+            console.log(`💬 GroupChatScreen: 📥 Retrying message load in ${delay}ms (attempt ${retryCount + 2}/4)`);
             setTimeout(() => loadWithRetry(retryCount + 1), delay);
+          } else {
+            console.error('❌ GroupChatScreen: 📥 Max retries reached, giving up on message loading');
           }
         }
       };
@@ -550,33 +620,57 @@ const GroupChatScreen = ({ route }) => {
       let unsubscribe = null;
       
       try {
+        console.log('💬 GroupChatScreen: 📥 Setting up message subscription...');
+        const subscriptionStartTime = Date.now();
+        
         unsubscribe = setupGroupMessageSubscription(currentGroupChat.id);
-        console.log('💬 GroupChatScreen: 📥 Message subscription setup result:', {
+        
+        const subscriptionTime = Date.now() - subscriptionStartTime;
+        console.log('💬 GroupChatScreen: 📥 Message subscription setup completed:', {
+          setupTime: subscriptionTime + 'ms',
           unsubscribeExists: !!unsubscribe,
-          unsubscribeType: typeof unsubscribe
+          unsubscribeType: typeof unsubscribe,
+          groupId: currentGroupChat.id
         });
+        
       } catch (subscriptionError) {
-        console.error('❌ GroupChatScreen: 📥 Error setting up message subscription:', subscriptionError);
-        }
+        console.error('❌ GroupChatScreen: 📥 Error setting up message subscription:', {
+          error: subscriptionError.message,
+          stack: subscriptionError.stack,
+          groupId: currentGroupChat.id
+        });
+      }
         
-        return () => {
-        console.log('💬 GroupChatScreen: 📥 Cleaning up message subscription');
+      return () => {
+        console.log('💬 GroupChatScreen: 📥 Cleanup: Starting subscription cleanup for group:', currentGroupChat.id);
         
-          if (unsubscribe && typeof unsubscribe === 'function') {
+        if (unsubscribe && typeof unsubscribe === 'function') {
           try {
-            console.log('💬 GroupChatScreen: 📥 Unsubscribing from group messages');
+            console.log('💬 GroupChatScreen: 📥 Unsubscribing from group messages...');
+            const cleanupStartTime = Date.now();
+            
             unsubscribe();
-            console.log('💬 GroupChatScreen: 📥 Successfully unsubscribed from group messages');
+            
+            const cleanupTime = Date.now() - cleanupStartTime;
+            console.log('💬 GroupChatScreen: 📥 Successfully unsubscribed from group messages:', {
+              cleanupTime: cleanupTime + 'ms'
+            });
           } catch (unsubscribeError) {
-            console.error('❌ GroupChatScreen: 📥 Error unsubscribing from group messages:', unsubscribeError);
+            console.error('❌ GroupChatScreen: 📥 Error unsubscribing from group messages:', {
+              error: unsubscribeError.message,
+              stack: unsubscribeError.stack
+            });
           }
         } else {
-          console.log('💬 GroupChatScreen: 📥 No message subscription to clean up');
+          console.log('💬 GroupChatScreen: 📥 No message subscription to clean up:', {
+            unsubscribeExists: !!unsubscribe,
+            unsubscribeType: typeof unsubscribe
+          });
         }
-        };
-      } else {
+      };
+    } else {
       console.log('💬 GroupChatScreen: 📥 No current group chat, skipping message loading');
-      }
+    }
   }, [currentGroupChat?.id, loadGroupMessages, setupGroupMessageSubscription]);
   
   // Set up real-time subscription for group chat updates (member changes)
@@ -713,22 +807,44 @@ const GroupChatScreen = ({ route }) => {
         messagesCount: groupMessages?.length || 0
       });
       
-      // Fetch group chats and friends
-      Promise.all([
-        getGroupChats().catch(error => {
-          console.error('❌ GroupChatScreen: 🎯 Error fetching group chats:', error);
-          return [];
-        }),
-        getFriends().catch(error => {
-          console.error('❌ GroupChatScreen: 🎯 Error fetching friends:', error);
-          return [];
-        })
-      ]).then(([groupChatsResult, friendsResult]) => {
-        console.log('💬 GroupChatScreen: 🎯 Data fetch completed:', {
-          groupChatsLoaded: Array.isArray(groupChatsResult) ? groupChatsResult.length : 'error',
-          friendsLoaded: Array.isArray(friendsResult) ? friendsResult.length : 'error'
+      // Only fetch data if we don't have it already to prevent unnecessary loading states
+      const fetchPromises = [];
+      
+      if (!groupChats || groupChats.length === 0) {
+        console.log('💬 GroupChatScreen: 🎯 No group chats cached, fetching...');
+        fetchPromises.push(
+          getGroupChats().catch(error => {
+            console.error('❌ GroupChatScreen: 🎯 Error fetching group chats:', error);
+            return [];
+          })
+        );
+      } else {
+        console.log('💬 GroupChatScreen: 🎯 Group chats already loaded, skipping fetch');
+      }
+      
+      if (!friends || friends.length === 0) {
+        console.log('💬 GroupChatScreen: 🎯 No friends cached, fetching...');
+        fetchPromises.push(
+          getFriends().catch(error => {
+            console.error('❌ GroupChatScreen: 🎯 Error fetching friends:', error);
+            return [];
+          })
+        );
+      } else {
+        console.log('💬 GroupChatScreen: 🎯 Friends already loaded, skipping fetch');
+      }
+      
+      if (fetchPromises.length > 0) {
+        Promise.all(fetchPromises).then((results) => {
+          console.log('💬 GroupChatScreen: 🎯 Data fetch completed:', {
+            fetchedItems: results.length,
+            groupChatsCount: groupChats?.length || 0,
+            friendsCount: friends?.length || 0
+          });
         });
-      });
+      } else {
+        console.log('💬 GroupChatScreen: 🎯 All data already available, no fetching needed');
+      }
       
       // Also reload messages if we have a current group chat
       if (currentGroupChat?.id) {
@@ -740,96 +856,42 @@ const GroupChatScreen = ({ route }) => {
         console.log('💬 GroupChatScreen: 🎯 No current group chat, skipping message reload');
       }
 
-      // Set up periodic message refresh to catch any missed messages
-      let refreshInterval = null;
-      if (currentGroupChat?.id) {
-        console.log('💬 GroupChatScreen: 🔄 Setting up periodic message refresh');
-        refreshInterval = setInterval(async () => {
-          try {
-            console.log('💬 GroupChatScreen: 🔄 Periodic message refresh');
-            await loadGroupMessages(currentGroupChat.id);
-          } catch (error) {
-            console.error('❌ GroupChatScreen: 🔄 Error in periodic message refresh:', error);
-          }
-        }, 10000); // Refresh every 10 seconds
-      }
-
-      // Cleanup function
+      // Cleanup function when screen loses focus (user navigates away)
       return () => {
-        if (refreshInterval) {
-          console.log('💬 GroupChatScreen: 🔄 Clearing periodic message refresh');
-          clearInterval(refreshInterval);
-        }
+        console.log('💬 GroupChatScreen: 🔄 Screen losing focus, but preserving current group chat for navigation');
+        // Don't clear the current group chat here - this was causing navigation issues
+        // where users couldn't open group chats because the current group was being cleared
       };
-    }, [getGroupChats, getFriends, currentGroupChat?.id, loadGroupMessages])
+    }, [getGroupChats, getFriends, currentGroupChat?.id, loadGroupMessages, groupChats?.length, friends?.length])
   );
 
-  // Get member details from the current group chat
+  // Get member details from the current group chat - optimized to reduce re-renders
   const memberDetails = useMemo(() => {
-    console.log('💬 GroupChatScreen: 🔍 Calculating member details...');
-    console.log('💬 GroupChatScreen: 🔍 Current group chat:', {
-      id: currentGroupChat?.id,
-      name: currentGroupChat?.name,
-      memberIds: currentGroupChat?.member_ids,
-      memberCount: currentGroupChat?.member_ids?.length || 0,
-      creator: currentGroupChat?.creator ? {
-        id: currentGroupChat.creator.id,
-        name: currentGroupChat.creator.display_name
-      } : null
-    });
-    console.log('💬 GroupChatScreen: 🔍 Available friends:', friends?.length || 0);
-    
-    if (!currentGroupChat?.member_ids) {
-      console.log('💬 GroupChatScreen: 🔍 No member IDs found in current group chat');
+    if (!currentGroupChat?.member_ids || !friends) {
       return [];
     }
     
-    const members = (friends || []).filter(friend => 
+    const members = friends.filter(friend => 
       currentGroupChat.member_ids.includes(friend.id)
     );
     
-    console.log('💬 GroupChatScreen: 🔍 Members found from friends list:', members.map(m => ({
-      id: m.id,
-      name: m.display_name,
-      username: m.username
-    })));
-    
     // Add creator if not already in friends list
     if (currentGroupChat.creator && !members.find(m => m.id === currentGroupChat.creator.id)) {
-      console.log('💬 GroupChatScreen: 🔍 Adding creator to member list:', {
-        id: currentGroupChat.creator.id,
-        name: currentGroupChat.creator.display_name
-      });
       members.push(currentGroupChat.creator);
     }
     
-    console.log('💬 GroupChatScreen: 🔍 Final member details:', members.map(m => ({ 
-      id: m.id, 
-      name: m.display_name || m.name 
-    })));
-    
     return members;
-  }, [currentGroupChat, friends]);
+  }, [currentGroupChat?.id, currentGroupChat?.member_ids, currentGroupChat?.creator?.id, friends]);
 
-  // Available friends to add (not already members)
+  // Available friends to add (not already members) - optimized
   const availableFriends = useMemo(() => {
-    console.log('💬 GroupChatScreen: 🔍 Calculating available friends to add...');
-    
-    if (!currentGroupChat?.member_ids) {
-      console.log('💬 GroupChatScreen: 🔍 No current group member IDs, returning all friends');
+    if (!currentGroupChat?.member_ids || !friends) {
       return friends || [];
     }
     
-    const available = (friends || []).filter(friend => 
+    return friends.filter(friend => 
       !currentGroupChat.member_ids.includes(friend.id)
     );
-    
-    console.log('💬 GroupChatScreen: 🔍 Available friends to add:', {
-      total: available.length,
-      friends: available.map(f => ({ id: f.id, name: f.display_name }))
-    });
-    
-    return available;
   }, [friends, currentGroupChat?.member_ids]);
 
   const handleSendMessage = async () => {
@@ -882,36 +944,13 @@ const GroupChatScreen = ({ route }) => {
       setMessage('');
       console.log('💬 GroupChatScreen: 📤 Message input cleared');
       
-      // Force reload messages multiple times to ensure they appear
-      const forceReload = async (attempt = 1, maxAttempts = 3) => {
-        console.log(`💬 GroupChatScreen: 📤 Force reloading messages after send (attempt ${attempt}/${maxAttempts})`);
-        try {
-          await loadGroupMessages(currentGroupChat.id);
-          console.log(`💬 GroupChatScreen: 📤 Messages reloaded successfully (attempt ${attempt})`);
-          
-          if (flatListRef.current) {
-            flatListRef.current.scrollToEnd({ animated: true });
-            console.log('💬 GroupChatScreen: 📤 Scrolled to end of message list');
-      } else {
-            console.warn('💬 GroupChatScreen: 📤 FlatList ref not available for scrolling');
-          }
-          
-          // Check if we need another attempt (for consistency)
-          if (attempt < maxAttempts) {
-            setTimeout(() => forceReload(attempt + 1, maxAttempts), 1000);
-          }
-        } catch (reloadError) {
-          console.error(`❌ GroupChatScreen: 📤 Error reloading messages after send (attempt ${attempt}):`, reloadError);
-          
-          // Retry if we haven't reached max attempts
-          if (attempt < maxAttempts) {
-            setTimeout(() => forceReload(attempt + 1, maxAttempts), 1500);
-          }
+      // Scroll to end without forced refresh - the real-time subscription will handle the new message
+      setTimeout(() => {
+        if (flatListRef.current) {
+          flatListRef.current.scrollToEnd({ animated: true });
+          console.log('💬 GroupChatScreen: 📤 Scrolled to end of message list');
         }
-      };
-      
-      // Start force reload after a short delay
-      setTimeout(() => forceReload(), 300);
+      }, 100);
       
     } catch (error) {
       console.error('❌ GroupChatScreen: 📤 Error sending message:', {
@@ -1153,8 +1192,25 @@ const GroupChatScreen = ({ route }) => {
   };
 
   const renderMessage = ({ item }) => {
+    console.log('💬 GroupChatScreen: 🎨 Rendering message:', {
+      messageId: item.id,
+      text: item.text?.substring(0, 30) + '...',
+      senderId: item.senderId,
+      senderName: item.senderName,
+      timestamp: item.timestamp?.toISOString(),
+      isCurrentUser: item.senderId === currentUserId,
+      memberDetailsCount: memberDetails?.length || 0
+    });
+    
     const isCurrentUser = item.senderId === currentUserId;
     const sender = !isCurrentUser ? memberDetails.find(m => m.id === item.senderId) : null;
+
+    if (!isCurrentUser && !sender) {
+      console.log('💬 GroupChatScreen: ⚠️ Sender not found in memberDetails:', {
+        senderId: item.senderId,
+        availableMemberIds: memberDetails?.map(m => m.id) || []
+      });
+    }
 
     return (
       <View style={[
@@ -1164,14 +1220,14 @@ const GroupChatScreen = ({ route }) => {
         {!isCurrentUser && sender && (
           <Text style={styles.senderName}>
             {sender.display_name || 'Unknown User'}
-            </Text>
+          </Text>
         )}
         <Text style={[
           styles.messageText, 
           !isCurrentUser && styles.theirMessageText
         ]}>
-            {item.text}
-          </Text>
+          {item.text}
+        </Text>
         <Text style={[
           styles.messageTimestamp, 
           !isCurrentUser && styles.theirMessageTimestamp
@@ -1190,8 +1246,8 @@ const GroupChatScreen = ({ route }) => {
               !isCurrentUser && styles.theirTimerText
             ]}>
               {item.timerSeconds}s
-          </Text>
-        </View>
+            </Text>
+          </View>
         )}
       </View>
     );
@@ -1255,17 +1311,23 @@ const GroupChatScreen = ({ route }) => {
   );
 
   if (loading) {
+    console.log('💬 GroupChatScreen: 🎨 Rendering loading state');
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading group chat...</Text>
-          </View>
+        </View>
       </SafeAreaView>
     );
   }
 
   if (!currentGroupChat) {
+    console.log('💬 GroupChatScreen: 🎨 Rendering no group chat state:', {
+      groupChatsCount: groupChats?.length || 0,
+      loading,
+      error
+    });
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.noChatContainer}>
@@ -1274,17 +1336,27 @@ const GroupChatScreen = ({ route }) => {
             {(groupChats?.length || 0) === 0 
               ? "No group chats found.\nCreate your first group chat!" 
               : "Select a group chat to start messaging"}
-            </Text>
+          </Text>
           <TouchableOpacity 
             style={styles.createGroupButton}
             onPress={() => navigation.navigate('CreateGroupChat')}
           >
             <Text style={styles.createGroupButtonText}>Create Group Chat</Text>
           </TouchableOpacity>
-          </View>
+        </View>
       </SafeAreaView>
     );
   }
+
+  console.log('💬 GroupChatScreen: 🎨 Rendering main group chat UI:', {
+    currentGroupChatId: currentGroupChat?.id,
+    currentGroupChatName: currentGroupChat?.name,
+    groupMessagesCount: groupMessages?.length || 0,
+    loading,
+    error,
+    memberDetailsCount: memberDetails?.length || 0,
+    hasMessages: (groupMessages?.length || 0) > 0
+  });
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -1322,19 +1394,29 @@ const GroupChatScreen = ({ route }) => {
       </View>
 
       {/* Messages List */}
-        <FlatList
-          ref={flatListRef}
+      <FlatList
+        ref={flatListRef}
         data={groupMessages || []}
-          renderItem={renderMessage}
-          keyExtractor={(item) => item.id.toString()}
-        extraData={`${(groupMessages?.length || 0)}-${(memberDetails?.length || 0)}-${currentGroupChat?.updated_at}-${currentGroupChat?.member_ids?.length || 0}-${friends?.length || 0}`} // Force re-render when messages or members change
+        renderItem={renderMessage}
+        keyExtractor={(item) => item.id.toString()}
+        extraData={groupMessages?.length || 0} // Simplified extraData - only re-render when message count changes
         style={styles.messageList}
         contentContainerStyle={styles.messageListContent}
         onContentSizeChange={() => {
-          console.log('💬 GroupChatScreen: 📨 FlatList content size changed, scrolling to end');
-          flatListRef.current?.scrollToEnd({ animated: true });
+          console.log('💬 GroupChatScreen: 🎨 FlatList content size changed:', {
+            messagesCount: groupMessages?.length || 0
+          });
+          // Only auto-scroll if user is near the bottom to prevent interrupting reading
+          if (flatListRef.current) {
+            setTimeout(() => {
+              flatListRef.current?.scrollToEnd({ animated: true });
+            }, 50);
+          }
         }}
         onLayout={() => {
+          console.log('💬 GroupChatScreen: 🎨 FlatList layout completed:', {
+            messagesCount: groupMessages?.length || 0
+          });
           // Scroll to end when component first renders with messages
           if ((groupMessages?.length || 0) > 0) {
             setTimeout(() => {
@@ -1342,15 +1424,15 @@ const GroupChatScreen = ({ route }) => {
             }, 100);
           }
         }}
-          ListEmptyComponent={
+        ListEmptyComponent={
           <View style={styles.emptyMessagesContainer}>
             <Ionicons name="chatbubble-outline" size={60} color={colors.text + '40'} />
             <Text style={styles.emptyMessagesText}>
               No messages yet. Start the conversation!
-              </Text>
-            </View>
-          }
-        />
+            </Text>
+          </View>
+        }
+      />
 
       {/* Message Input */}
       <KeyboardAvoidingView
@@ -1461,7 +1543,7 @@ const GroupChatScreen = ({ route }) => {
               data={memberDetails || []}
               renderItem={renderMemberItem}
               keyExtractor={(item) => item.id.toString()}
-              extraData={`${(memberDetails?.length || 0)}-${currentGroupChat?.updated_at}-${currentGroupChat?.member_ids?.length || 0}-${friends?.length || 0}`}
+              extraData={memberDetails?.length || 0}
               style={styles.membersList}
             />
 

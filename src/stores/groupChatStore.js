@@ -8,12 +8,21 @@ export const useGroupChatStore = create((set, get) => ({
   groupMessages: [],
   loading: false,
   error: null,
+  activeSubscription: null, // Track active subscription to prevent duplicates
 
   // Get all group chats for the current user
   getGroupChats: async () => {
     try {
-      console.log('💬 GroupChatStore: Loading group chats...');
-      set({ loading: true, error: null });
+      const currentState = get();
+      const hasExistingChats = currentState.groupChats && currentState.groupChats.length > 0;
+      
+      console.log('💬 GroupChatStore: Loading group chats...', {
+        hasExistingChats,
+        existingCount: currentState.groupChats?.length || 0
+      });
+      
+      // Only show loading state if we don't have any group chats yet
+      set({ loading: !hasExistingChats, error: null });
 
       const { user } = useSupabaseAuthStore.getState();
       const userId = user?.uid || user?.id;
@@ -297,27 +306,9 @@ export const useGroupChatStore = create((set, get) => ({
 
       console.log('💬 GroupChatStore: 📤 Group message sent:', data);
 
-      // Optimistically add message to local state for immediate feedback
-      const optimisticMessage = {
-        id: data.id,
-        text: data.content,
-        senderId: data.sender_id,
-        senderName: data.sender?.display_name || data.sender?.username || 'You',
-        timestamp: new Date(data.created_at),
-        isSystem: data.message_type === 'system',
-        timerSeconds: data.timer_seconds || 0
-      };
-
-      // Only add if it doesn't already exist (to prevent duplicates)
-      const currentState = get();
-      const existingMessage = currentState.groupMessages.find(msg => msg.id === data.id);
-      
-      if (!existingMessage) {
-        console.log('💬 GroupChatStore: 📤 Adding sent message to local state optimistically');
-        set(state => ({
-          groupMessages: [...state.groupMessages, optimisticMessage]
-        }));
-      }
+      // Optimistically add message to local state for immediate feedback - REMOVED to prevent duplicates
+      // The real-time subscription will handle adding the message
+      console.log('💬 GroupChatStore: 📤 Message sent, real-time subscription will handle display');
 
       // Update group chat timestamp
       await supabase
@@ -366,13 +357,22 @@ export const useGroupChatStore = create((set, get) => ({
   // Load messages for a specific group chat
   loadGroupMessages: async (groupChatId) => {
     try {
-      console.log('💬 GroupChatStore: Loading messages for group:', groupChatId);
+      console.log('💬 GroupChatStore: 🔍 loadGroupMessages called with:', {
+        groupChatId,
+        groupChatIdType: typeof groupChatId,
+        groupChatIdExists: !!groupChatId
+      });
+      
       set({ loading: true, error: null });
 
       if (!groupChatId) {
+        console.error('💬 GroupChatStore: ❌ Group chat ID is required but not provided');
         throw new Error('Group chat ID is required');
       }
 
+      console.log('💬 GroupChatStore: 🔍 Querying messages from Supabase...');
+      const startTime = Date.now();
+      
       const { data, error } = await supabase
         .from('messages')
         .select(`
@@ -387,33 +387,128 @@ export const useGroupChatStore = create((set, get) => ({
         .eq('group_chat_id', groupChatId)
         .order('created_at', { ascending: true });
 
+      const queryTime = Date.now() - startTime;
+      console.log('💬 GroupChatStore: 🔍 Supabase query completed in', queryTime, 'ms');
+
       if (error) {
-        console.error('💬 GroupChatStore: Supabase error loading messages:', error);
+        console.error('💬 GroupChatStore: ❌ Supabase error loading messages:', {
+          error: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        });
         throw error;
       }
 
-      console.log('💬 GroupChatStore: Raw messages from database:', data);
+      console.log('💬 GroupChatStore: 🔍 Raw query result:', {
+        dataExists: !!data,
+        dataType: typeof data,
+        dataLength: data?.length || 0,
+        firstMessage: data?.[0] ? {
+          id: data[0].id,
+          content: data[0].content?.substring(0, 50) + '...',
+          created_at: data[0].created_at,
+          sender_id: data[0].sender_id,
+          hasSender: !!data[0].sender
+        } : null
+      });
 
       // Process messages for display
-      const processedMessages = (data || []).map(msg => ({
-        id: msg.id,
-        text: msg.content,
-        senderId: msg.sender_id,
-        senderName: msg.sender?.display_name || msg.sender?.username || 'Unknown',
-        timestamp: new Date(msg.created_at),
-        isSystem: msg.message_type === 'system',
-        timerSeconds: msg.timer_seconds || 0
-      }));
+      const processedMessages = (data || []).map((msg, index) => {
+        console.log(`💬 GroupChatStore: 🔍 Processing message ${index + 1}/${data.length}:`, {
+          id: msg.id,
+          content: msg.content?.substring(0, 30) + '...',
+          sender_id: msg.sender_id,
+          sender_display_name: msg.sender?.display_name,
+          sender_username: msg.sender?.username,
+          created_at: msg.created_at,
+          message_type: msg.message_type
+        });
+        
+        return {
+          id: msg.id,
+          text: msg.content,
+          senderId: msg.sender_id,
+          senderName: msg.sender?.display_name || msg.sender?.username || 'Unknown',
+          timestamp: new Date(msg.created_at),
+          isSystem: msg.message_type === 'system',
+          timerSeconds: msg.timer_seconds || 0
+        };
+      });
 
-      console.log('💬 GroupChatStore: Processed messages:', processedMessages);
-      console.log('💬 GroupChatStore: Loaded', processedMessages.length, 'group messages');
+      console.log('💬 GroupChatStore: 🔍 Message processing complete:', {
+        originalCount: data?.length || 0,
+        processedCount: processedMessages.length,
+        processedMessages: processedMessages.map(msg => ({
+          id: msg.id,
+          text: msg.text?.substring(0, 30) + '...',
+          senderName: msg.senderName,
+          timestamp: msg.timestamp.toISOString(),
+          isSystem: msg.isSystem
+        }))
+      });
+
+      // Check current state before updating
+      const currentState = get();
+      console.log('💬 GroupChatStore: 🔍 Current state before update:', {
+        currentGroupChatId: currentState.currentGroupChat?.id,
+        currentMessagesCount: currentState.groupMessages?.length || 0,
+        loading: currentState.loading,
+        error: currentState.error
+      });
       
-      set({ groupMessages: processedMessages, loading: false });
+      // CRITICAL: Only set messages if they belong to the requested group to prevent cross-contamination
+      if (currentState.currentGroupChat?.id === groupChatId) {
+        console.log('💬 GroupChatStore: 🔍 Setting messages in state for correct group:', {
+          requestedGroup: groupChatId,
+          currentGroup: currentState.currentGroupChat?.id,
+          messagesCount: processedMessages.length
+        });
+        
+        set({ 
+          groupMessages: processedMessages, 
+          loading: false,
+          error: null
+        });
+        
+        // Verify state was updated
+        const updatedState = get();
+        console.log('💬 GroupChatStore: 🔍 State updated successfully:', {
+          newMessagesCount: updatedState.groupMessages?.length || 0,
+          loading: updatedState.loading,
+          error: updatedState.error,
+          firstMessage: updatedState.groupMessages?.[0] ? {
+            id: updatedState.groupMessages[0].id,
+            text: updatedState.groupMessages[0].text?.substring(0, 30) + '...',
+            senderName: updatedState.groupMessages[0].senderName
+          } : null
+        });
+        
+        console.log('💬 GroupChatStore: ✅ Successfully loaded', processedMessages.length, 'group messages for group', groupChatId);
+      } else {
+        console.log('💬 GroupChatStore: ⚠️ Messages loaded for different group, ignoring to prevent cross-contamination:', {
+          requestedGroup: groupChatId,
+          currentGroup: currentState.currentGroupChat?.id,
+          messagesCount: processedMessages.length
+        });
+        
+        set({ loading: false });
+      }
       return processedMessages;
 
     } catch (error) {
-      console.error('💬 GroupChatStore: Error loading group messages:', error);
-      set({ error: error.message, loading: false, groupMessages: [] });
+      console.error('💬 GroupChatStore: ❌ Error in loadGroupMessages:', {
+        error: error.message,
+        stack: error.stack,
+        groupChatId
+      });
+      
+      set({ 
+        error: error.message, 
+        loading: false, 
+        groupMessages: [] 
+      });
+      
       return [];
     }
   },
@@ -430,6 +525,17 @@ export const useGroupChatStore = create((set, get) => ({
     if (!supabase) {
       console.error('💬 GroupChatStore: 📡 Supabase client not available');
       return null;
+    }
+
+    // Clean up any existing subscription first
+    const currentState = get();
+    if (currentState.activeSubscription) {
+      console.log('💬 GroupChatStore: 📡 Cleaning up existing subscription before creating new one');
+      try {
+        currentState.activeSubscription.unsubscribe();
+      } catch (error) {
+        console.error('💬 GroupChatStore: 📡 Error cleaning up existing subscription:', error);
+      }
     }
 
     let subscription = null;
@@ -470,6 +576,17 @@ export const useGroupChatStore = create((set, get) => ({
                 try {
                   // Check if message already exists to prevent duplicates
                   const currentState = get();
+                  
+                  // CRITICAL: Check if this message belongs to the current group to prevent cross-contamination
+                  if (currentState.currentGroupChat?.id !== payload.new.group_chat_id) {
+                    console.log('💬 GroupChatStore: 📨 Message belongs to different group, ignoring to prevent cross-contamination:', {
+                      messageGroupId: payload.new.group_chat_id,
+                      currentGroupId: currentState.currentGroupChat?.id,
+                      messageId: payload.new.id
+                    });
+                    return;
+                  }
+                  
                   const existingMessage = currentState.groupMessages.find(msg => msg.id === payload.new.id);
                   
                   if (existingMessage) {
@@ -508,11 +625,22 @@ export const useGroupChatStore = create((set, get) => ({
                     timerSeconds: newMessage.timerSeconds
                   });
                   
-                  set(state => ({
-                    groupMessages: [...state.groupMessages, newMessage]
-                  }));
+                  // Use a more stable state update that doesn't cause flickering
+                  set(state => {
+                    // Double-check for duplicates before adding
+                    const exists = state.groupMessages.some(msg => msg.id === newMessage.id);
+                    if (exists) {
+                      console.log('💬 GroupChatStore: 📨 Duplicate message detected in state update, skipping');
+                      return state; // Return unchanged state
+                    }
+                    
+                    return {
+                      ...state,
+                      groupMessages: [...state.groupMessages, newMessage]
+                    };
+                  });
                   
-                  console.log('💬 GroupChatStore: 📨 Total messages after adding:', get().groupMessages.length);
+                  console.log('💬 GroupChatStore: 📨 Message added successfully');
                   
                 } catch (messageError) {
                   console.error('💬 GroupChatStore: 📨 Error processing real-time message:', messageError);
@@ -568,6 +696,11 @@ export const useGroupChatStore = create((set, get) => ({
     // Create initial subscription
     subscription = createSubscription();
     
+    // Track the active subscription in store state
+    if (subscription) {
+      set({ activeSubscription: subscription });
+    }
+    
     // Return cleanup function
     return () => {
       console.log('💬 GroupChatStore: 📡 Cleanup function called for subscription');
@@ -580,9 +713,10 @@ export const useGroupChatStore = create((set, get) => ({
         } catch (unsubscribeError) {
           console.error('❌ GroupChatStore: 📡 Error during unsubscribe:', unsubscribeError);
         }
-      } else {
-        console.log('💬 GroupChatStore: 📡 No subscription to unsubscribe from');
       }
+      
+      // Clear the active subscription from store state
+      set({ activeSubscription: null });
     };
   },
 
@@ -738,12 +872,87 @@ export const useGroupChatStore = create((set, get) => ({
 
   // Set current group chat
   setCurrentGroupChat: (groupChat) => {
-    set({ currentGroupChat: groupChat });
+    const currentState = get();
+    const previousGroup = currentState.currentGroupChat;
+    
+    console.log('💬 GroupChatStore: Setting current group chat:', {
+      previousGroupId: previousGroup?.id,
+      previousGroupName: previousGroup?.name,
+      newGroupId: groupChat?.id,
+      newGroupName: groupChat?.name,
+      memberCount: groupChat?.member_ids?.length || 0,
+      isChangingGroup: previousGroup?.id !== groupChat?.id
+    });
+    
+    // If changing to a different group, clear messages to prevent cross-contamination
+    if (previousGroup?.id && previousGroup.id !== groupChat?.id) {
+      console.log('💬 GroupChatStore: Changing to different group, clearing messages to prevent cross-contamination');
+      set({ 
+        currentGroupChat: groupChat,
+        groupMessages: [], // Clear messages when switching groups
+        loading: false,
+        error: null
+      });
+    } else {
+      set({ currentGroupChat: groupChat });
+    }
   },
 
   // Clear current group chat
-  clearCurrentGroupChat: () => {
-    set({ currentGroupChat: null, groupMessages: [] });
+  clearCurrentGroupChat: (clearMessages = true) => {
+    const currentState = get();
+    
+    console.log('💬 GroupChatStore: Clearing current group chat:', {
+      clearMessages,
+      hasActiveSubscription: !!currentState.activeSubscription,
+      currentGroupChatId: currentState.currentGroupChat?.id
+    });
+    
+    // Clean up any active subscription
+    if (currentState.activeSubscription) {
+      try {
+        console.log('💬 GroupChatStore: Cleaning up subscription when clearing current group chat');
+        currentState.activeSubscription.unsubscribe();
+      } catch (error) {
+        console.error('💬 GroupChatStore: Error cleaning up subscription:', error);
+      }
+    }
+    
+    // Only clear messages if explicitly requested (for navigation away)
+    // Don't clear messages during component re-renders to prevent flickering
+    const stateUpdate = { 
+      currentGroupChat: null, 
+      activeSubscription: null
+    };
+    
+    if (clearMessages) {
+      stateUpdate.groupMessages = [];
+      console.log('💬 GroupChatStore: Messages cleared along with current group chat');
+    } else {
+      console.log('💬 GroupChatStore: Messages preserved during group chat clearing');
+    }
+    
+    set(stateUpdate);
+  },
+
+  // Clean up all subscriptions
+  cleanup: () => {
+    const currentState = get();
+    
+    if (currentState.activeSubscription) {
+      try {
+        console.log('💬 GroupChatStore: Cleaning up all subscriptions');
+        currentState.activeSubscription.unsubscribe();
+      } catch (error) {
+        console.error('💬 GroupChatStore: Error during cleanup:', error);
+      }
+    }
+    
+    set({ 
+      activeSubscription: null,
+      groupMessages: [],
+      currentGroupChat: null
+    });
   },
 
   // Alias for compatibility
