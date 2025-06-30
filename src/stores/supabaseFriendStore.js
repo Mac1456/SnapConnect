@@ -176,14 +176,29 @@ export const useSupabaseFriendStore = create((set, get) => ({
       }
 
       console.log('🟢 FriendStore: Fetching friends for user:', currentUserId);
-      const { data, error } = await supabase
+      
+      // First get the friendships
+      const { data: friendships, error: friendshipsError } = await supabase
         .from('friendships')
-        .select('friend:friend_id(id, username, display_name, email, profile_picture)')
+        .select('friend_id')
         .eq('user_id', currentUserId);
 
-      if (error) throw error;
+      if (friendshipsError) throw friendshipsError;
 
-      const friends = data.map(item => item.friend) || [];
+      // Then get the friend details for each friendship
+      const friends = [];
+      for (const friendship of friendships || []) {
+        const { data: friendData, error: friendError } = await supabase
+          .from('users')
+          .select('id, username, display_name, email, profile_picture')
+          .eq('id', friendship.friend_id)
+          .single();
+          
+        if (!friendError && friendData) {
+          friends.push(friendData);
+        }
+      }
+
       console.log('🟢 FriendStore: Found', friends.length, 'friends.');
       set({ friends, loading: false });
       return friends;
@@ -205,15 +220,45 @@ export const useSupabaseFriendStore = create((set, get) => ({
       }
       
       console.log('🟢 FriendStore: Fetching friend requests for user:', currentUserId);
-      const { data, error } = await supabase
+      
+      // First get the friend requests
+      const { data: requests, error: requestsError } = await supabase
         .from('friend_requests')
-        .select('*, requester:requester_id(id, username, display_name, email, profile_picture)')
+        .select('*')
         .eq('requested_id', currentUserId)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (requestsError) throw requestsError;
       
-      const friendRequests = data || [];
+      // Then get the requester details for each request
+      const friendRequests = [];
+      for (const request of requests || []) {
+        const { data: requesterData, error: requesterError } = await supabase
+          .from('users')
+          .select('id, username, display_name, email, profile_picture')
+          .eq('id', request.requester_id)
+          .single();
+          
+        if (!requesterError && requesterData) {
+          friendRequests.push({
+            ...request,
+            requester: requesterData
+          });
+        } else {
+          // If we can't get requester data, still include the request but with basic info
+          friendRequests.push({
+            ...request,
+            requester: {
+              id: request.requester_id,
+              username: request.requester_username || 'Unknown',
+              display_name: request.requester_display_name || 'Unknown User',
+              email: null,
+              profile_picture: null
+            }
+          });
+        }
+      }
+      
       console.log('🟢 FriendStore: Found', friendRequests.length, 'friend requests.');
       set({ friendRequests, loading: false });
       return friendRequests;
