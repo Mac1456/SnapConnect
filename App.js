@@ -25,7 +25,7 @@ const Stack = createStackNavigator();
 export default function App() {
   console.log('📱 App.js: App component rendering...');
   
-  const { user, loading, checkAuthState } = useAuthStore();
+  const { user, loading, initialize } = useAuthStore();
   
   console.log('📱 App.js: Auth state:', { 
     user: user ? 'User logged in' : 'No user', 
@@ -34,17 +34,16 @@ export default function App() {
   });
 
   useEffect(() => {
-    console.log('📱 App.js: useEffect - checking auth state...');
-    const initAuth = async () => {
-      try {
-        await checkAuthState();
-        console.log('📱 App.js: checkAuthState called successfully');
-      } catch (error) {
-        console.error('📱 App.js: Error in checkAuthState:', error);
+    console.log('📱 App.js: useEffect - initializing auth...');
+    const subscription = initialize();
+    
+    // Cleanup subscription on unmount
+    return () => {
+      if (subscription) {
+        subscription.unsubscribe();
       }
     };
-    initAuth();
-  }, [checkAuthState]);
+  }, [initialize]);
 
   if (loading) {
     console.log('📱 App.js: Showing loading state...');

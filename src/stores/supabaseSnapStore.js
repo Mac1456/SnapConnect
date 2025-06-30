@@ -256,24 +256,17 @@ export const useSupabaseSnapStore = create((set, get) => ({
       console.log('🟢 SupabaseSnapStore: 📖 Starting loadAllStories for user:', userId);
       set({ loading: true, error: null });
       
+      // Use simple query without join to avoid relationship errors
       const { data, error } = await supabase
         .from('stories')
-        .select(`
-          *,
-          user:user_id (
-            id,
-            username,
-            display_name,
-            profile_picture
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (error) {
         console.error('🟢 SupabaseSnapStore: 📖 Error loading all stories:', error.message);
         console.error('🟢 SupabaseSnapStore: 📖 Error details:', JSON.stringify(error, null, 2));
         set({ error: error.message, loading: false });
-        return;
+        return [];
       }
 
       console.log('🟢 SupabaseSnapStore: 📖 Raw stories data from database:', data?.length, 'stories');
@@ -285,15 +278,15 @@ export const useSupabaseSnapStore = create((set, get) => ({
         console.log('🟢 SupabaseSnapStore: 📖 Processing story:', story.id, 'from user:', story.user_id);
         
         const processedStory = {
-        id: story.id,
-        userId: story.user_id,
-        username: story.username || story.user?.username || 'Unknown',
-        displayName: story.display_name || story.user?.display_name || story.username || 'Unknown',
-        mediaUrl: story.media_url,
-        mediaType: story.media_type,
-        caption: story.caption,
-        createdAt: new Date(story.created_at),
-        views: story.views || [],
+          id: story.id,
+          userId: story.user_id,
+          username: story.username || 'Unknown',
+          displayName: story.display_name || story.username || 'Unknown',
+          mediaUrl: story.media_url,
+          mediaType: story.media_type,
+          caption: story.caption,
+          createdAt: new Date(story.created_at),
+          views: story.views || [],
         };
         
         console.log('🟢 SupabaseSnapStore: 📖 Processed story:', JSON.stringify(processedStory, null, 2));
@@ -434,7 +427,7 @@ export const useSupabaseSnapStore = create((set, get) => ({
   // Set up real-time subscription for stories
   setupStoriesListener: (userId) => {
     if (!userId) {
-      console.log('🟢 SupabaseSnapStore: 📖 No userId provided for stories listener');
+      console.log('�� SupabaseSnapStore: 📖 No userId provided for stories listener');
       return;
     }
     

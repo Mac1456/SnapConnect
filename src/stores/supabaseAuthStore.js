@@ -82,169 +82,97 @@ export const useSupabaseAuthStore = create((set, get) => ({
 
   // Sign in user
   signIn: async (email, password) => {
-    console.log('🟢 SupabaseAuthStore: signIn called for:', email);
     try {
+      console.log('🟢 SupabaseAuthStore: signIn called for:', email);
       set({ loading: true, error: null });
-      
+
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password: password,
+        email: email.trim(),
+        password: password
       });
 
       if (error) {
         console.error('🟢 SupabaseAuthStore: signIn error:', error);
-        
-        // Provide more helpful error messages
-        let errorMessage = error.message;
-        if (error.message.includes('Invalid login credentials')) {
-          errorMessage = 'Invalid email or password. Please check your credentials and try again.';
-        } else if (error.message.includes('Email not confirmed')) {
-          errorMessage = 'Please check your email and confirm your account before signing in.';
-        } else if (error.message.includes('Too many requests')) {
-          errorMessage = 'Too many login attempts. Please wait a moment and try again.';
-        }
-        
-        set({ error: errorMessage, loading: false });
-        return { success: false, error: errorMessage };
+        set({ error: error.message, loading: false });
+        return null;
       }
 
-      console.log('🟢 SupabaseAuthStore: signIn successful for user:', data.user.id);
-      
-      // Check if user profile exists, create if missing
-      if (data.user) {
-        const { data: profile, error: profileError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', data.user.id)
-          .single();
-
-        if (profileError && profileError.code === 'PGRST116') {
-          // Profile doesn't exist, create it
-          console.log('🟢 SupabaseAuthStore: Creating missing profile for existing user');
-          
-          const username = data.user.email.split('@')[0];
-          const { error: createError } = await supabase
-            .from('users')
-            .insert({
-              id: data.user.id,
-              email: data.user.email,
-              username: username,
-              display_name: username,
-              created_at: new Date().toISOString(),
-            });
-
-          if (createError) {
-            console.error('🟢 SupabaseAuthStore: Error creating profile:', createError);
-            // Don't fail the login if profile creation fails
-          } else {
-            console.log('🟢 SupabaseAuthStore: Profile created for existing user');
-          }
-        } else if (profileError) {
-          console.error('🟢 SupabaseAuthStore: Error fetching profile:', profileError);
-        }
-      }
-      
-      // Auth state change will be handled by the listener
+      console.log('🟢 SupabaseAuthStore: signIn successful:', data.user?.id);
       set({ loading: false });
-      return { success: true };
-      
+      return data.user;
     } catch (error) {
       console.error('🟢 SupabaseAuthStore: signIn error:', error);
-      const errorMessage = 'An unexpected error occurred. Please try again.';
-      set({ error: errorMessage, loading: false });
-      return { success: false, error: errorMessage };
+      set({ error: error.message, loading: false });
+      return null;
     }
   },
 
   // Sign up user
-  signUp: async (email, password, username) => {
-    console.log('🟢 SupabaseAuthStore: signUp called for:', email, 'username:', username);
+  signUp: async (email, password, username, displayName) => {
     try {
+      console.log('🟢 SupabaseAuthStore: signUp called for:', email, 'with username:', username);
       set({ loading: true, error: null });
-      
-      // Check if username is already taken (ignore PGRST116 error which means no rows found)
+
+      // First, check if username exists
       const { data: existingUser, error: checkError } = await supabase
         .from('users')
         .select('username')
-        .eq('username', username)
+        .eq('username', username.toLowerCase())
         .single();
 
-      if (checkError && checkError.code !== 'PGRST116') {
-        console.error('🟢 SupabaseAuthStore: Error checking username:', checkError);
-        // Continue with signup even if check fails
-      }
-
       if (existingUser) {
-        set({ error: 'Username is already taken. Please choose a different one.', loading: false });
-        return;
+        set({ error: 'Username already exists', loading: false });
+        return null;
       }
 
-      // Sign up the user
+      // Create auth user
       const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            username: username,
-            display_name: username,
-          }
-        }
+        email: email.trim(),
+        password: password
       });
 
       if (error) {
         console.error('🟢 SupabaseAuthStore: signUp error:', error);
-        if (error.message.includes('User already registered')) {
-          set({ error: 'This email is already registered. Please sign in instead.', loading: false });
-        } else {
-          set({ error: error.message, loading: false });
-        }
-        return;
+        set({ error: error.message, loading: false });
+        return null;
       }
 
       if (data.user) {
-        console.log('🟢 SupabaseAuthStore: User account created:', data.user.id);
+        console.log('🟢 SupabaseAuthStore: Auth user created:', data.user.id);
         
-        // Wait a moment for the auth session to be fully established
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Create user profile using secure function
-        const { data: profileData, error: profileError } = await supabase
-          .rpc('create_user_profile', {
-            user_id: data.user.id,
-            user_email: email,
-            user_username: username,
-            user_display_name: username  // Use username as display_name
-          });
+        // Create user profile
+        const profileData = {
+          id: data.user.id,
+          email: email.trim(),
+          username: username.toLowerCase(),
+          display_name: displayName || username,
+          profile_picture: null,
+          bio: '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+
+        const { error: profileError } = await supabase
+          .from('users')
+          .insert(profileData);
 
         if (profileError) {
           console.error('🟢 SupabaseAuthStore: Profile creation error:', profileError);
-          set({ 
-            error: profileError.message || 'Failed to create user profile',
-            loading: false 
-          });
-          return;
+          set({ error: 'Failed to create user profile', loading: false });
+          return null;
         }
 
-        console.log('🟢 SupabaseAuthStore: User profile created successfully');
-        
-        // Update the user object with profile data
-        set({ 
-          user: {
-            uid: data.user.id,
-            email: data.user.email,
-            username: username,
-            displayName: username,  // Set displayName to username
-            display_name: username, // Also set snake_case version
-            profilePicture: null,
-            profile_picture: null
-          },
-          loading: false 
-        });
+        console.log('🟢 SupabaseAuthStore: User account created:', data.user.id);
+        set({ loading: false });
+        return data.user;
       }
-      
+
+      set({ loading: false });
+      return null;
     } catch (error) {
       console.error('🟢 SupabaseAuthStore: signUp error:', error);
       set({ error: error.message, loading: false });
+      return null;
     }
   },
 
@@ -269,45 +197,39 @@ export const useSupabaseAuthStore = create((set, get) => ({
     }
   },
 
-  // Mark onboarding as completed
+  // Complete onboarding
   completeOnboarding: async () => {
     try {
       const { user } = get();
-      if (!user) {
-        console.error('🟢 SupabaseAuthStore: No authenticated user for onboarding completion');
-        return { success: false, error: 'User not authenticated' };
+      console.log('🟢 SupabaseAuthStore: Marking onboarding as completed for user:', user?.uid);
+      
+      if (!user?.uid) {
+        console.error('🟢 SupabaseAuthStore: No user found for onboarding completion');
+        return;
       }
 
-      console.log('🟢 SupabaseAuthStore: Marking onboarding as completed for user:', user.id);
-
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('users')
-        .update({ 
-          onboarding_completed: true,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id)
-        .select()
-        .single();
+        .update({ onboarding_completed: true })
+        .eq('id', user.uid);
 
       if (error) {
         console.error('🟢 SupabaseAuthStore: Error updating onboarding status:', error);
-        return { success: false, error: error.message };
+        throw error;
       }
 
-      // Update local user state
-      set({ 
-        user: { 
-          ...user, 
-          onboarding_completed: true 
-        } 
-      });
+      // Update local state
+      set((state) => ({
+        user: {
+          ...state.user,
+          onboarding_completed: true
+        }
+      }));
 
-      console.log('🟢 SupabaseAuthStore: Onboarding completed successfully');
-      return { success: true };
+      console.log('🟢 SupabaseAuthStore: Onboarding marked as completed');
     } catch (error) {
-      console.error('🟢 SupabaseAuthStore: Complete onboarding error:', error);
-      return { success: false, error: error.message };
+      console.error('🟢 SupabaseAuthStore: completeOnboarding error:', error);
+      set({ error: error.message });
     }
   },
 
@@ -435,5 +357,88 @@ export const useSupabaseAuthStore = create((set, get) => ({
   },
 
   // Clear error
-  clearError: () => set({ error: null })
+  clearError: () => set({ error: null }),
+
+  // Initialize auth listener
+  initialize: () => {
+    console.log('🟢 SupabaseAuthStore: Initializing auth listener');
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('🟢 SupabaseAuthStore: Auth state changed:', event);
+      
+      if (event === 'SIGNED_IN' && session?.user) {
+        console.log('🟢 SupabaseAuthStore: User signed in:', session.user.id);
+        
+        try {
+          // Fetch user profile from database
+          const { data: profile, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+
+          if (error) {
+            console.error('🟢 SupabaseAuthStore: Error fetching profile:', error);
+            // Set basic user data from auth session
+            set({
+              user: {
+                uid: session.user.id,
+                id: session.user.id,
+                email: session.user.email,
+                username: session.user.email?.split('@')[0] || 'user',
+                display_name: session.user.email?.split('@')[0] || 'user',
+                profile_picture: null
+              },
+              loading: false,
+              isAuthenticated: true
+            });
+          } else {
+            console.log('🟢 SupabaseAuthStore: Profile fetched successfully:', profile);
+            // Set user data with profile
+            set({
+              user: {
+                uid: profile.id,
+                id: profile.id,
+                email: profile.email,
+                username: profile.username,
+                display_name: profile.display_name,
+                profile_picture: profile.profile_picture,
+                bio: profile.bio,
+                onboarding_completed: profile.onboarding_completed
+              },
+              loading: false,
+              isAuthenticated: true
+            });
+          }
+        } catch (error) {
+          console.error('🟢 SupabaseAuthStore: Error in auth state change:', error);
+          set({
+            user: {
+              uid: session.user.id,
+              id: session.user.id,
+              email: session.user.email,
+              username: session.user.email?.split('@')[0] || 'user',
+              display_name: session.user.email?.split('@')[0] || 'user',
+              profile_picture: null
+            },
+            loading: false,
+            isAuthenticated: true
+          });
+        }
+      } else if (event === 'SIGNED_OUT') {
+        console.log('🟢 SupabaseAuthStore: User signed out');
+        set({
+          user: null,
+          loading: false,
+          isAuthenticated: false,
+          error: null
+        });
+      } else {
+        console.log('🟢 SupabaseAuthStore: Auth event:', event);
+        set({ loading: false });
+      }
+    });
+
+    return subscription;
+  }
 })); 
