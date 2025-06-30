@@ -137,7 +137,12 @@ export default function HomeScreen({ navigation }) {
   };
 
   const handleProfilePress = () => {
-    console.log('🏠 HomeScreen: Profile button pressed');
+    console.log('🏠 HomeScreen: Profile button pressed - showing user switcher');
+    setShowUserSwitcher(true);
+  };
+
+  const handleProfileLongPress = () => {
+    console.log('🏠 HomeScreen: Profile button long pressed - navigating to profile');
     try {
       // Try to get the parent navigation (stack navigator)
       const rootNavigation = parentNavigation.getParent();
@@ -153,11 +158,6 @@ export default function HomeScreen({ navigation }) {
       // Fallback navigation
       navigation.navigate('Profile');
     }
-  };
-
-  const handleProfileLongPress = () => {
-    console.log('🏠 HomeScreen: Profile button long pressed - showing user switcher');
-    setShowUserSwitcher(true);
   };
 
   const handleLogout = () => {
@@ -236,15 +236,17 @@ export default function HomeScreen({ navigation }) {
               shadowRadius: 4,
               elevation: 4,
               overflow: 'hidden',
+              borderWidth: 2,
+              borderColor: currentTheme.colors.snapYellow,
             }}
           >
             {getProfilePicture() ? (
               <Image 
                 source={{ uri: getProfilePicture() }} 
                 style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 24,
+                  width: 44,
+                  height: 44,
+                  borderRadius: 22,
                 }}
                 resizeMode="cover"
                 onError={(error) => {
@@ -263,6 +265,23 @@ export default function HomeScreen({ navigation }) {
                 {getDefaultAvatar()}
               </Text>
             )}
+            
+            {/* Switch User Indicator */}
+            <View style={{
+              position: 'absolute',
+              bottom: -2,
+              right: -2,
+              width: 18,
+              height: 18,
+              borderRadius: 9,
+              backgroundColor: currentTheme.colors.snapYellow,
+              justifyContent: 'center',
+              alignItems: 'center',
+              borderWidth: 2,
+              borderColor: currentTheme.colors.background,
+            }}>
+              <Ionicons name="swap-horizontal" size={10} color={currentTheme.colors.textInverse} />
+            </View>
           </TouchableOpacity>
           
           <TouchableOpacity
@@ -298,18 +317,29 @@ export default function HomeScreen({ navigation }) {
         <View className="flex-row justify-around px-4 py-4">
           <TouchableOpacity 
             style={{ backgroundColor: currentTheme.colors.surface }}
-            className="rounded-2xl px-8 py-4 backdrop-blur-lg shadow-lg"
+            className="rounded-2xl px-6 py-4 backdrop-blur-lg shadow-lg"
             onPress={navigateToCamera}
           >
-            <Text style={{ color: currentTheme.colors.text }} className="font-bold text-lg">📸 Take Snap</Text>
+            <Text style={{ color: currentTheme.colors.text }} className="font-bold text-base">📸 Take Snap</Text>
           </TouchableOpacity>
           
           <TouchableOpacity 
             style={{ backgroundColor: currentTheme.colors.surface }}
-            className="rounded-2xl px-8 py-4 backdrop-blur-lg shadow-lg"
+            className="rounded-2xl px-6 py-4 backdrop-blur-lg shadow-lg"
             onPress={() => navigation.navigate('Chats')}
           >
-            <Text style={{ color: currentTheme.colors.text }} className="font-bold text-lg">💬 View Chats</Text>
+            <Text style={{ color: currentTheme.colors.text }} className="font-bold text-base">💬 View Chats</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={{ backgroundColor: currentTheme.colors.snapYellow }}
+            className="rounded-2xl px-6 py-4 backdrop-blur-lg shadow-lg"
+            onPress={() => {
+              console.log('🏠 HomeScreen: Switch User button pressed');
+              setShowUserSwitcher(true);
+            }}
+          >
+            <Text style={{ color: currentTheme.colors.textInverse }} className="font-bold text-base">🔄 Switch User</Text>
           </TouchableOpacity>
         </View>
 
