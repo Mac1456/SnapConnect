@@ -338,21 +338,29 @@ const ChatScreen = ({ navigation, route }) => {
         filter: `or(and(sender_id.eq.${currentUserId},recipient_id.eq.${recipientId}),and(sender_id.eq.${recipientId},recipient_id.eq.${currentUserId}))`
       }, (payload) => {
         console.log('💬 ChatScreen: New message received:', payload.new);
-        const newMsg = payload.new;
         
-        const processedMessage = {
-          id: newMsg.id,
-          text: newMsg.content,
-          senderId: newMsg.sender_id,
-          recipientId: newMsg.recipient_id,
-          timestamp: new Date(newMsg.created_at),
-          isCurrentUser: newMsg.sender_id === currentUserId,
-          senderName: newMsg.sender_id === currentUserId ? 'You' : recipientName,
-          timerSeconds: newMsg.timer_seconds || 0,
-          isDisappearing: newMsg.timer_seconds > 0,
-        };
+        // Check if message already exists to prevent duplicates from optimistic update
+        setMessages(prev => {
+          if (prev.some(msg => msg.id === payload.new.id)) {
+            return prev;
+          }
 
-        setMessages(prev => [...prev, processedMessage]);
+          const newMsg = payload.new;
+          
+          const processedMessage = {
+            id: newMsg.id,
+            text: newMsg.content,
+            senderId: newMsg.sender_id,
+            recipientId: newMsg.recipient_id,
+            timestamp: new Date(newMsg.created_at),
+            isCurrentUser: newMsg.sender_id === currentUserId,
+            senderName: newMsg.sender_id === currentUserId ? 'You' : recipientName,
+            timerSeconds: newMsg.timer_seconds || 0,
+            isDisappearing: newMsg.timer_seconds > 0,
+          };
+
+          return [...prev, processedMessage];
+        });
         
         // Auto-scroll to new message
         setTimeout(() => {
@@ -384,7 +392,7 @@ const ChatScreen = ({ navigation, route }) => {
     setNewMessage('');
 
     try {
-      const { data, error } = await supabase
+      const { data: newMsg, error } = await supabase
         .from('messages')
         .insert([
           {
@@ -406,7 +414,26 @@ const ChatScreen = ({ navigation, route }) => {
         return;
       }
 
-      console.log('✅ ChatScreen: Message sent successfully:', data.id);
+      console.log('✅ ChatScreen: Message sent successfully:', newMsg.id);
+
+      // Optimistic update
+      const processedMessage = {
+        id: newMsg.id,
+        text: newMsg.content,
+        senderId: newMsg.sender_id,
+        recipientId: newMsg.recipient_id,
+        timestamp: new Date(newMsg.created_at),
+        isCurrentUser: newMsg.sender_id === currentUserId,
+        senderName: 'You',
+        timerSeconds: newMsg.timer_seconds || 0,
+        isDisappearing: newMsg.timer_seconds > 0,
+      };
+      
+      setMessages(prev => [...prev, processedMessage]);
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+
     } catch (error) {
       console.error('❌ ChatScreen: Error in sendMessage:', error);
       Alert.alert('Error', 'Failed to send message. Please try again.');
