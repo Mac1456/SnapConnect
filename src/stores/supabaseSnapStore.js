@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../../supabase.config';
 import { useSupabaseAuthStore } from './supabaseAuthStore';
+import * as FileSystem from 'expo-file-system';
 
 export const useSupabaseSnapStore = create((set, get) => ({
   snaps: [],
@@ -63,15 +64,33 @@ export const useSupabaseSnapStore = create((set, get) => ({
       
       console.log('🟢 SupabaseSnapStore: Uploading file:', fileName);
       
-      // Convert file URI to blob for upload
-      const response = await fetch(mediaUri);
-      const blob = await response.blob();
+      // Use Expo FileSystem for more reliable file handling in React Native
+      console.log('🟢 SupabaseSnapStore: Reading file info...');
+      const fileInfo = await FileSystem.getInfoAsync(mediaUri);
+      console.log('🟢 SupabaseSnapStore: File info:', JSON.stringify(fileInfo, null, 2));
       
-      console.log('🟢 SupabaseSnapStore: Blob created, size:', blob.size);
+      if (!fileInfo.exists) {
+        throw new Error(`File does not exist: ${mediaUri}`);
+      }
+      
+      console.log('🟢 SupabaseSnapStore: File size:', fileInfo.size, 'bytes');
+      
+      // Read file as base64 and convert to blob
+      const base64 = await FileSystem.readAsStringAsync(mediaUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      
+      console.log('🟢 SupabaseSnapStore: Base64 length:', base64.length);
+      
+      // Convert base64 to blob
+      const response = await fetch(`data:${mediaType === 'image' ? 'image/jpeg' : 'video/mp4'};base64,${base64}`);
+      const arrayBuffer = await response.arrayBuffer();
+      
+      console.log('🟢 SupabaseSnapStore: ArrayBuffer created, size:', arrayBuffer.byteLength);
       
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('media')
-        .upload(fileName, blob, {
+        .upload(fileName, arrayBuffer, {
           contentType: mediaType === 'image' ? 'image/jpeg' : 'video/mp4',
           upsert: false
         });
@@ -178,18 +197,33 @@ export const useSupabaseSnapStore = create((set, get) => ({
       console.log('🟢 SupabaseSnapStore: 📖 Story - Uploading file:', fileName);
       console.log('🟢 SupabaseSnapStore: 📖 Story - Media URI:', mediaUri);
       
-      const formData = new FormData();
-      formData.append('file', {
-        uri: mediaUri,
-        name: fileName.split('/').pop(),
-        type: mediaType === 'image' ? 'image/jpeg' : 'video/mp4',
+      // Use Expo FileSystem for more reliable file handling in React Native
+      console.log('🟢 SupabaseSnapStore: 📖 Story - Reading file info...');
+      const fileInfo = await FileSystem.getInfoAsync(mediaUri);
+      console.log('🟢 SupabaseSnapStore: 📖 Story - File info:', JSON.stringify(fileInfo, null, 2));
+      
+      if (!fileInfo.exists) {
+        throw new Error(`File does not exist: ${mediaUri}`);
+      }
+      
+      console.log('🟢 SupabaseSnapStore: 📖 Story - File size:', fileInfo.size, 'bytes');
+      
+      // Read file as base64 and convert to blob
+      const base64 = await FileSystem.readAsStringAsync(mediaUri, {
+        encoding: FileSystem.EncodingType.Base64,
       });
       
-      console.log('🟢 SupabaseSnapStore: 📖 Story - FormData created for upload.');
+      console.log('🟢 SupabaseSnapStore: 📖 Story - Base64 length:', base64.length);
+      
+      // Convert base64 to blob
+      const response = await fetch(`data:${mediaType === 'image' ? 'image/jpeg' : 'video/mp4'};base64,${base64}`);
+      const arrayBuffer = await response.arrayBuffer();
+      
+      console.log('�� SupabaseSnapStore: 📖 Story - ArrayBuffer created, size:', arrayBuffer.byteLength);
       
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('media')
-        .upload(fileName, formData, {
+        .upload(fileName, arrayBuffer, {
           contentType: mediaType === 'image' ? 'image/jpeg' : 'video/mp4',
           upsert: false
         });
@@ -209,7 +243,10 @@ export const useSupabaseSnapStore = create((set, get) => ({
 
       console.log('🟢 SupabaseSnapStore: 📖 Story - Public URL:', publicUrl);
 
-      // Create story record
+      // Create story record with expiration (24 hours from now)
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 24);
+      
       const storyRecord = {
           user_id: userId,
           username: user.username || user.email?.split('@')[0] || 'Unknown',
@@ -217,8 +254,10 @@ export const useSupabaseSnapStore = create((set, get) => ({
           media_url: publicUrl,
           media_type: mediaType,
           caption: caption,
+          expires_at: expiresAt.toISOString(),
       };
       
+      console.log('🟢 SupabaseSnapStore: 📖 Story - Story will expire at:', expiresAt.toISOString());
       console.log('🟢 SupabaseSnapStore: 📖 Story - Creating story record:', JSON.stringify(storyRecord, null, 2));
       
       const { data: storyData, error: storyError } = await supabase
