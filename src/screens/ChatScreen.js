@@ -13,6 +13,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Switch,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSupabaseAuthStore as useAuthStore } from '../stores/supabaseAuthStore';
@@ -184,12 +185,6 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: isDarkMode ? '#333333' : colors.border,
   },
-  attachButton: {
-    padding: 8,
-    marginRight: 8,
-    borderRadius: 20,
-    backgroundColor: colors.card,
-  },
   input: {
     flex: 1,
     minHeight: 40,
@@ -208,7 +203,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#FFD700',
+    backgroundColor: '#E6C200',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
@@ -217,6 +212,62 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   disabledSendButton: {
     backgroundColor: colors.textTertiary,
     borderColor: colors.textTertiary,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: colors.text + '60',
+    textAlign: 'center',
+    marginTop: 16,
+    lineHeight: 22,
+  },
+  optionsModal: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  optionsContainer: {
+    backgroundColor: isDarkMode ? '#1C1C1E' : '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  optionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginVertical: 4,
+    backgroundColor: isDarkMode ? '#2C2C2E' : '#F8F8F8',
+  },
+  optionText: {
+    fontSize: 16,
+    marginLeft: 16,
+    color: isDarkMode ? '#FFFFFF' : (colors?.text || '#000000'),
+    fontWeight: '400',
+  },
+  deleteOption: {
+    backgroundColor: (colors?.notification || '#FF3B30') + '10',
+  },
+  deleteOptionText: {
+    color: colors?.notification || '#FF3B30',
+    fontWeight: '500',
+  },
+  cancelOption: {
+    backgroundColor: isDarkMode ? '#2C2C2E' : colors.border + '20',
+    marginTop: 8,
   },
 });
 
@@ -228,6 +279,7 @@ const ChatScreen = ({ navigation, route }) => {
   const [sending, setSending] = useState(false);
   const [isEphemeral, setIsEphemeral] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(10);
+  const [showOptionsModal, setShowOptionsModal] = useState(false);
   const flatListRef = useRef(null);
   
   console.log('💬 ChatScreen: Initialized with recipient:', recipientId, recipientName);
@@ -238,12 +290,20 @@ const ChatScreen = ({ navigation, route }) => {
   
   // Ensure colors is available before creating styles
   const styles = useMemo(() => {
-    if (!colors) return {};
-    return createStyles(colors, isDarkMode);
+    // Provide fallback colors if colors is undefined
+    const fallbackColors = colors || {
+      background: isDarkMode ? '#000000' : '#FFFFFF',
+      text: isDarkMode ? '#FFFFFF' : '#000000',
+      primary: '#007AFF',
+      card: isDarkMode ? '#1C1C1E' : '#F2F2F7',
+      notification: '#FF3B30',
+      border: isDarkMode ? '#38383A' : '#C6C6C8',
+    };
+    return createStyles(fallbackColors, isDarkMode);
   }, [colors, isDarkMode]);
 
   const currentUserId = user?.uid || user?.id || user?.userId;
-  
+
   console.log('💬 ChatScreen: Current user ID:', currentUserId);
 
   useEffect(() => {
@@ -332,32 +392,32 @@ const ChatScreen = ({ navigation, route }) => {
     const subscription = supabase
       .channel('messages')
       .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        filter: `or(and(sender_id.eq.${currentUserId},recipient_id.eq.${recipientId}),and(sender_id.eq.${recipientId},recipient_id.eq.${currentUserId}))`
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'messages',
+          filter: `or(and(sender_id.eq.${currentUserId},recipient_id.eq.${recipientId}),and(sender_id.eq.${recipientId},recipient_id.eq.${currentUserId}))`
       }, (payload) => {
         console.log('💬 ChatScreen: New message received:', payload.new);
-        const newMsg = payload.new;
-        
-        const processedMessage = {
-          id: newMsg.id,
-          text: newMsg.content,
-          senderId: newMsg.sender_id,
-          recipientId: newMsg.recipient_id,
-          timestamp: new Date(newMsg.created_at),
-          isCurrentUser: newMsg.sender_id === currentUserId,
-          senderName: newMsg.sender_id === currentUserId ? 'You' : recipientName,
+          const newMsg = payload.new;
+          
+          const processedMessage = {
+            id: newMsg.id,
+            text: newMsg.content,
+            senderId: newMsg.sender_id,
+            recipientId: newMsg.recipient_id,
+            timestamp: new Date(newMsg.created_at),
+            isCurrentUser: newMsg.sender_id === currentUserId,
+            senderName: newMsg.sender_id === currentUserId ? 'You' : recipientName,
           timerSeconds: newMsg.timer_seconds || 0,
           isDisappearing: newMsg.timer_seconds > 0,
-        };
+          };
 
         setMessages(prev => [...prev, processedMessage]);
-        
+            
         // Auto-scroll to new message
-        setTimeout(() => {
+            setTimeout(() => {
           flatListRef.current?.scrollToEnd({ animated: true });
-        }, 100);
+            }, 100);
       })
       .subscribe();
 
@@ -416,6 +476,48 @@ const ChatScreen = ({ navigation, route }) => {
     }
   };
 
+  const deleteMessageHistory = async () => {
+    setShowOptionsModal(false);
+    
+    Alert.alert(
+      'Delete Message History',
+      `Are you sure you want to delete all messages with ${recipientName}? This action cannot be undone.`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('💬 ChatScreen: Deleting message history between', currentUserId, 'and', recipientId);
+              
+              const { error } = await supabase
+                .from('messages')
+                .update({ deleted_at: new Date().toISOString() })
+                .or(`and(sender_id.eq.${currentUserId},recipient_id.eq.${recipientId}),and(sender_id.eq.${recipientId},recipient_id.eq.${currentUserId})`);
+
+              if (error) {
+                console.error('❌ ChatScreen: Error deleting messages:', error);
+                Alert.alert('Error', 'Failed to delete message history. Please try again.');
+                return;
+              }
+
+              setMessages([]);
+              console.log('✅ ChatScreen: Message history deleted successfully');
+              Alert.alert('Success', 'Message history has been deleted.');
+            } catch (error) {
+              console.error('❌ ChatScreen: Error in deleteMessageHistory:', error);
+              Alert.alert('Error', 'Failed to delete message history. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const formatTime = (timestamp) => {
     return timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
@@ -428,8 +530,8 @@ const ChatScreen = ({ navigation, route }) => {
 
   const renderMessage = ({ item }) => {
     const isCurrentUser = item.isCurrentUser;
-    
-    return (
+
+      return (
       <View style={styles.messageContainer}>
         <View style={[
           styles.messageBubble,
@@ -460,7 +562,7 @@ const ChatScreen = ({ navigation, route }) => {
                   !isCurrentUser && styles.theirTimerText
                 ]}>
                   {item.timerSeconds}s
-                </Text>
+          </Text>
               </View>
             )}
           </View>
@@ -482,103 +584,99 @@ const ChatScreen = ({ navigation, route }) => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Header */}
+        {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
+          <TouchableOpacity
           style={styles.headerButton}
           onPress={() => navigation.goBack()}
         >
           <Ionicons name="arrow-back" size={24} color={isDarkMode ? '#FFFFFF' : colors.text} />
-        </TouchableOpacity>
+          </TouchableOpacity>
 
         <View style={styles.headerInfo}>
           <Text style={styles.headerTitle}>{recipientName || 'Chat'}</Text>
           <Text style={styles.headerSubtitle}>
             {recipientUsername ? `@${recipientUsername}` : ''}
-          </Text>
-        </View>
+            </Text>
+          </View>
 
-        <TouchableOpacity
+          <TouchableOpacity
           style={styles.headerButton}
-          onPress={() => {/* Add profile/options functionality */}}
+          onPress={() => setShowOptionsModal(true)}
         >
           <Ionicons name="ellipsis-vertical" size={24} color={isDarkMode ? '#FFFFFF' : colors.text} />
-        </TouchableOpacity>
-      </View>
+          </TouchableOpacity>
+        </View>
 
-      {/* Messages List */}
-      <FlatList
-        ref={flatListRef}
-        data={messages}
+        {/* Messages List */}
+        <FlatList
+          ref={flatListRef}
+          data={messages}
         renderItem={renderMessage}
-        keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(item) => item.id.toString()}
         style={styles.messageList}
         contentContainerStyle={styles.messageListContent}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-        ListEmptyComponent={
+          ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Ionicons name="chatbubble-outline" size={60} color={colors.text + '40'} />
             <Text style={styles.emptyText}>
               No messages yet. Say hello to {recipientName}!
-            </Text>
-          </View>
-        }
-      />
+              </Text>
+            </View>
+          }
+        />
 
       {/* Message Input */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
-                  {/* Ephemeral Message Controls */}
-          <View style={styles.ephemeralControls}>
-            <View style={styles.ephemeralToggle}>
-              <Ionicons 
-                name="timer" 
-                size={16} 
-                color={isEphemeral ? '#FF69B4' : (isDarkMode ? '#AAAAAA' : colors.text)} 
-              />
-                          <Switch
+        {/* Ephemeral Message Controls */}
+        <View style={styles.ephemeralControls}>
+          <View style={styles.ephemeralToggle}>
+            <Ionicons 
+              name="timer" 
+              size={16} 
+              color={isEphemeral ? '#FF69B4' : (isDarkMode ? '#AAAAAA' : colors.text)} 
+            />
+            <Switch
               value={isEphemeral}
               onValueChange={setIsEphemeral}
               trackColor={{ false: isDarkMode ? '#333333' : '#E0E0E0', true: '#FF69B4' }}
               thumbColor={isEphemeral ? '#FFFFFF' : (isDarkMode ? '#AAAAAA' : '#F4F3F4')}
             />
-            </View>
-            
-            {isEphemeral && (
-              <View style={styles.timerSelector}>
-                {[5, 10, 30, 60].map((seconds) => (
-                  <TouchableOpacity
-                    key={seconds}
-                    style={[
-                      styles.timerButton,
-                      {
-                        backgroundColor: timerSeconds === seconds ? '#FF69B4' : (isDarkMode ? '#2C2C2E' : '#F0F0F0'),
-                        borderColor: isDarkMode ? '#3C3C3E' : '#E0E0E0',
-                      }
-                    ]}
-                    onPress={() => setTimerSeconds(seconds)}
-                  >
-                    <Text style={[
-                      styles.timerButtonText,
-                      {
-                        color: timerSeconds === seconds ? '#FFFFFF' : (isDarkMode ? '#FFFFFF' : colors.text)
-                      }
-                    ]}>
-                      {seconds}s
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
           </View>
+          
+          {isEphemeral && (
+            <View style={styles.timerSelector}>
+              {[5, 10, 30, 60].map((seconds) => (
+                <TouchableOpacity
+                  key={seconds}
+                  style={[
+                    styles.timerButton,
+                    {
+                      backgroundColor: timerSeconds === seconds ? '#FF69B4' : (isDarkMode ? '#2C2C2E' : '#F0F0F0'),
+                      borderColor: isDarkMode ? '#3C3C3E' : '#E0E0E0',
+                    }
+                  ]}
+                  onPress={() => setTimerSeconds(seconds)}
+                >
+                  <Text style={[
+                    styles.timerButtonText,
+                    {
+                      color: timerSeconds === seconds ? '#FFFFFF' : (isDarkMode ? '#FFFFFF' : colors.text)
+                    }
+                  ]}>
+                    {seconds}s
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
 
         <View style={styles.inputContainer}>
-          <TouchableOpacity style={styles.attachButton}>
-            <Ionicons name="camera" size={20} color={colors.primary} />
-          </TouchableOpacity>
-          
           <TextInput
             style={styles.input}
             value={newMessage}
@@ -589,8 +687,8 @@ const ChatScreen = ({ navigation, route }) => {
             maxLength={1000}
             onSubmitEditing={sendMessage}
           />
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             onPress={sendMessage}
             style={[styles.sendButton, !newMessage.trim() && styles.disabledSendButton]}
             disabled={!newMessage.trim() || sending}
@@ -598,7 +696,7 @@ const ChatScreen = ({ navigation, route }) => {
             {sending ? (
               <ActivityIndicator size="small" color="white" />
             ) : (
-              <Ionicons 
+            <Ionicons 
                 name="send" 
                 size={20} 
                 color={newMessage.trim() ? 'white' : colors.text + '40'} 
@@ -607,6 +705,70 @@ const ChatScreen = ({ navigation, route }) => {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Options Modal */}
+      <Modal
+        visible={showOptionsModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowOptionsModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.optionsModal}
+          activeOpacity={1}
+          onPress={() => setShowOptionsModal(false)}
+        >
+          <View style={styles.optionsContainer}>
+            <TouchableOpacity
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingVertical: 16,
+                paddingHorizontal: 16,
+                borderRadius: 12,
+                marginVertical: 4,
+                backgroundColor: '#FF3B3010',
+              }}
+              onPress={deleteMessageHistory}
+            >
+              <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+              <Text style={{
+                color: '#FF3B30',
+                fontWeight: 'bold',
+                fontSize: 16,
+                marginLeft: 16,
+                textAlign: 'left',
+                flex: 1,
+              }}>
+                Delete Message History
+              </Text>
+            </TouchableOpacity>
+            
+              <TouchableOpacity
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingVertical: 16,
+                paddingHorizontal: 16,
+                borderRadius: 12,
+                marginVertical: 4,
+                backgroundColor: isDarkMode ? '#2C2C2E' : '#F8F8F8',
+                marginTop: 8,
+              }}
+              onPress={() => setShowOptionsModal(false)}
+            >
+              <Ionicons name="close-outline" size={20} color={isDarkMode ? '#FFFFFF' : '#000000'} />
+              <Text style={{
+                color: isDarkMode ? '#FFFFFF' : '#000000',
+                fontSize: 16,
+                marginLeft: 16,
+                fontWeight: '400',
+                flex: 1,
+              }}>Cancel</Text>
+              </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 };

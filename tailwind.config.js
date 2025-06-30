@@ -4,7 +4,7 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        snapYellow: '#FFFC00',
+        snapYellow: '#E6C200',
         snapBlue: '#0EADFF',
         snapPurple: '#7B68EE',
         snapPink: '#FF6B9D',

@@ -27,16 +27,37 @@ export default function ProfileScreen({ navigation }) {
   const [editEmail, setEditEmail] = useState(user?.email || '');
   const [editBio, setEditBio] = useState(user?.bio || user?.display_bio || '');
   const [profileImage, setProfileImage] = useState(user?.profile_picture || user?.profileImage || null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Update state when user data changes
   React.useEffect(() => {
     if (user) {
+      console.log('👤 ProfileScreen: User data changed, updating state:', {
+        display_name: user?.display_name,
+        displayName: user?.displayName,
+        profile_picture: user?.profile_picture,
+        profileImage: user?.profileImage,
+        email: user?.email,
+        bio: user?.bio
+      });
       setEditDisplayName(user?.display_name || user?.displayName || '');
       setEditEmail(user?.email || '');
       setEditBio(user?.bio || user?.display_bio || '');
       setProfileImage(user?.profile_picture || user?.profileImage || null);
     }
   }, [user]);
+
+  const getProfilePicture = React.useCallback(() => {
+    const pic = profileImage || user?.profile_picture || user?.profileImage;
+    return pic;
+  }, [profileImage, user?.profile_picture, user?.profileImage]);
+
+  const getDefaultAvatar = React.useCallback(() => {
+    const displayName = user?.display_name || user?.displayName || user?.username || user?.email?.split('@')[0] || 'User';
+    const initials = displayName.split(' ').map(name => name.charAt(0).toUpperCase()).join('').slice(0, 2);
+    console.log('👤 ProfileScreen: Getting default avatar for', displayName, ':', initials);
+    return initials;
+  }, [user?.display_name, user?.displayName, user?.username, user?.email]);
 
   const handleLogout = () => {
     Alert.alert(
@@ -81,6 +102,12 @@ export default function ProfileScreen({ navigation }) {
         setIsEditModalVisible(false);
         Alert.alert('Success', 'Profile updated successfully!');
         console.log('👤 ProfileScreen: Profile updated successfully');
+        
+        // Force refresh the profile image state with the updated user data
+        if (result.user) {
+          setProfileImage(result.user.profile_picture || result.user.profilePicture);
+          setRefreshKey(prev => prev + 1); // Force re-render
+        }
       } else {
         Alert.alert('Error', result?.error || 'Failed to update profile. Please try again.');
       }
@@ -106,8 +133,10 @@ export default function ProfileScreen({ navigation }) {
       });
 
       if (!result.canceled) {
-        setProfileImage(result.assets[0].uri);
-        console.log('👤 ProfileScreen: Profile image selected');
+        const selectedImageUri = result.assets[0].uri;
+        console.log('👤 ProfileScreen: Profile image selected:', selectedImageUri);
+        setProfileImage(selectedImageUri);
+        console.log('👤 ProfileScreen: Profile image state updated');
       }
     } catch (error) {
       console.error('👤 ProfileScreen: Image picker error:', error);
@@ -203,13 +232,27 @@ export default function ProfileScreen({ navigation }) {
             <View className="items-center mb-6">
               <TouchableOpacity onPress={handleSelectProfileImage}>
                 <View 
-                  style={{ backgroundColor: currentTheme.colors.surface, borderColor: currentTheme.colors.textTertiary }}
+                  style={{ 
+                    backgroundColor: getProfilePicture() ? 'transparent' : currentTheme.colors.primary,
+                    borderColor: currentTheme.colors.textTertiary,
+                    overflow: 'hidden'
+                  }}
                   className="w-24 h-24 rounded-full items-center justify-center mb-4 border-4"
                 >
-                  {profileImage ? (
-                    <Image source={{ uri: profileImage }} className="w-full h-full rounded-full" />
+                  {getProfilePicture() ? (
+                    <Image 
+                      key={`profile-${refreshKey}`}
+                      source={{ uri: getProfilePicture() }} 
+                      className="w-full h-full rounded-full" 
+                      onError={(error) => {
+                        console.log('👤 ProfileScreen: Profile image load error:', error);
+                      }}
+                      onLoad={() => {
+                        console.log('👤 ProfileScreen: Profile image loaded successfully');
+                      }}
+                    />
                   ) : (
-                    <Ionicons name="person" size={48} color={currentTheme.colors.text} />
+                    <Text style={{ color: currentTheme.colors.background }} className="text-2xl font-bold">{getDefaultAvatar()}</Text>
                   )}
                 </View>
               </TouchableOpacity>
@@ -389,13 +432,27 @@ export default function ProfileScreen({ navigation }) {
                 <View className="items-center mb-6">
                   <TouchableOpacity onPress={handleSelectProfileImage}>
                     <View 
-                      style={{ backgroundColor: currentTheme.colors.surface, borderColor: currentTheme.colors.textTertiary }}
+                      style={{ 
+                        backgroundColor: getProfilePicture() ? 'transparent' : currentTheme.colors.primary,
+                        borderColor: currentTheme.colors.textTertiary,
+                        overflow: 'hidden'
+                      }}
                       className="w-24 h-24 rounded-full items-center justify-center mb-4 border-4"
                     >
-                      {profileImage ? (
-                        <Image source={{ uri: profileImage }} className="w-full h-full rounded-full" />
+                      {getProfilePicture() ? (
+                        <Image 
+                          key={`profile-edit-${refreshKey}`}
+                          source={{ uri: getProfilePicture() }} 
+                          className="w-full h-full rounded-full" 
+                          onError={(error) => {
+                            console.log('👤 ProfileScreen: Edit modal profile image load error:', error);
+                          }}
+                          onLoad={() => {
+                            console.log('👤 ProfileScreen: Edit modal profile image loaded successfully');
+                          }}
+                        />
                       ) : (
-                        <Ionicons name="person" size={48} color={currentTheme.colors.text} />
+                        <Text style={{ color: currentTheme.colors.background }} className="text-2xl font-bold">{getDefaultAvatar()}</Text>
                       )}
                     </View>
                     <Text style={{ color: currentTheme.colors.text }} className="text-center font-semibold">Change Photo</Text>

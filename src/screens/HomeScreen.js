@@ -17,14 +17,16 @@ import { useSupabaseSnapStore as useSnapStore } from '../stores/supabaseSnapStor
 import { useThemeStore } from '../stores/themeStore';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import UserSwitcher from '../components/UserSwitcher';
+import OnboardingGuide from '../components/OnboardingGuide';
 
 export default function HomeScreen({ navigation }) {
-  const { user, signOut } = useAuthStore();
+  const { user, signOut, completeOnboarding } = useAuthStore();
   const { currentTheme } = useThemeStore();
   const { friends, getFriends } = useFriendStore();
   const { stories, loadAllStories, setupStoriesListener } = useSnapStore();
   const parentNavigation = useNavigation();
   const [showUserSwitcher, setShowUserSwitcher] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   
   // Mock data for now
   const snaps = [];
@@ -37,6 +39,38 @@ export default function HomeScreen({ navigation }) {
       getFriends(user.uid);
       loadAllStories(user.uid);
       setupStoriesListener(user.uid);
+    }
+  }, [user]);
+
+  // Check if user should see onboarding
+  useEffect(() => {
+    if (user) {
+      const isNewUser = !user.onboarding_completed;
+      const isTestUser = user.email?.includes('test.com'); // Only test.com emails, not gmail.com
+      const isMainUser = user.email === 'mustafa.chaudheri@gmail.com'; // Your main account
+      
+      console.log('🏠 HomeScreen: Checking onboarding status:', {
+        userId: user.id,
+        email: user.email,
+        onboardingCompleted: user.onboarding_completed,
+        isNewUser,
+        isTestUser,
+        isMainUser
+      });
+
+      // Don't show onboarding for main user (you)
+      if (isMainUser) {
+        console.log('🏠 HomeScreen: Skipping onboarding for main user');
+        return;
+      }
+
+      if (isNewUser) {
+        console.log('🏠 HomeScreen: Showing onboarding guide for new user');
+        setShowOnboarding(true);
+      } else if (isTestUser) {
+        console.log('🏠 HomeScreen: Showing onboarding guide for test user');
+        setShowOnboarding(true);
+      }
     }
   }, [user]);
 
@@ -149,6 +183,35 @@ export default function HomeScreen({ navigation }) {
     );
   };
 
+  const getProfilePicture = React.useCallback(() => {
+    // Check for profile picture in user data (multiple possible field names)
+    const profilePic = user?.profile_picture || user?.profilePicture || user?.profileImage;
+    return profilePic;
+  }, [user?.profile_picture, user?.profilePicture, user?.profileImage]);
+
+  const getDefaultAvatar = React.useCallback(() => {
+    // Create a default avatar based on user's initials or name
+    const displayName = user?.display_name || user?.displayName || user?.username || user?.email?.split('@')[0] || 'User';
+    const initials = displayName.split(' ').map(name => name.charAt(0).toUpperCase()).join('').slice(0, 2);
+    console.log('🏠 HomeScreen: Getting default avatar for', displayName, ':', initials);
+    return initials;
+  }, [user?.display_name, user?.displayName, user?.username, user?.email]);
+
+  const handleOnboardingComplete = async () => {
+    console.log('🏠 HomeScreen: Onboarding completed');
+    setShowOnboarding(false);
+    
+    // Always mark as completed when user finishes onboarding
+    if (user) {
+      try {
+        await completeOnboarding();
+        console.log('🏠 HomeScreen: Onboarding status updated in database');
+      } catch (error) {
+        console.error('🏠 HomeScreen: Error updating onboarding status:', error);
+      }
+    }
+  };
+
   return (
           <LinearGradient
         colors={currentTheme.colors.backgroundGradient || ['#FFFFFF', '#F8F9FA']}
@@ -164,7 +227,7 @@ export default function HomeScreen({ navigation }) {
               width: 48,
               height: 48,
               borderRadius: 24,
-              backgroundColor: currentTheme.colors.primary,
+              backgroundColor: getProfilePicture() ? 'transparent' : currentTheme.colors.primary,
               justifyContent: 'center',
               alignItems: 'center',
               shadowColor: currentTheme.colors.shadow,
@@ -172,24 +235,44 @@ export default function HomeScreen({ navigation }) {
               shadowOpacity: 0.2,
               shadowRadius: 4,
               elevation: 4,
+              overflow: 'hidden',
             }}
           >
-            {user?.profilePicture || user?.profile_picture ? (
+            {getProfilePicture() ? (
               <Image 
-                source={{ uri: user.profilePicture || user.profile_picture }} 
+                source={{ uri: getProfilePicture() }} 
                 style={{
                   width: 48,
                   height: 48,
                   borderRadius: 24,
                 }}
                 resizeMode="cover"
+                onError={(error) => {
+                  console.log('🏠 HomeScreen: Profile image load error:', error);
+                }}
+                onLoad={() => {
+                  console.log('🏠 HomeScreen: Profile image loaded successfully');
+                }}
               />
             ) : (
-              <Ionicons name="person" size={24} color={currentTheme.colors.accent} />
+              <Text style={{ 
+                color: '#FFFFFF',
+                fontSize: 18,
+                fontWeight: 'bold'
+              }}>
+                {getDefaultAvatar()}
+              </Text>
             )}
           </TouchableOpacity>
           
-          <Text style={{ color: currentTheme.colors.text }} className="text-2xl font-bold drop-shadow-lg">SnapConnect</Text>
+          <TouchableOpacity
+            onLongPress={() => {
+              console.log('🏠 HomeScreen: Debug - showing onboarding guide');
+              setShowOnboarding(true);
+            }}
+          >
+            <Text style={{ color: currentTheme.colors.text }} className="text-2xl font-bold drop-shadow-lg">SnapConnect</Text>
+          </TouchableOpacity>
           
           <TouchableOpacity 
             onPress={() => navigation.navigate('Friends')}
@@ -197,7 +280,7 @@ export default function HomeScreen({ navigation }) {
               width: 48,
               height: 48,
               borderRadius: 24,
-              backgroundColor: currentTheme.colors.primary,
+              backgroundColor: currentTheme.colors.surface,
               justifyContent: 'center',
               alignItems: 'center',
               shadowColor: currentTheme.colors.shadow,
@@ -207,7 +290,7 @@ export default function HomeScreen({ navigation }) {
               elevation: 4,
             }}
           >
-            <Ionicons name="people-outline" size={24} color={currentTheme.colors.accent} />
+            <Ionicons name="people-outline" size={24} color={currentTheme.colors.text} />
           </TouchableOpacity>
         </View>
 
@@ -325,6 +408,12 @@ export default function HomeScreen({ navigation }) {
         <UserSwitcher 
           visible={showUserSwitcher}
           onClose={() => setShowUserSwitcher(false)}
+        />
+
+        {/* Onboarding Guide */}
+        <OnboardingGuide
+          visible={showOnboarding}
+          onComplete={handleOnboardingComplete}
         />
       </SafeAreaView>
     </LinearGradient>

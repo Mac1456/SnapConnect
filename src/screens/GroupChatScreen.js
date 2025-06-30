@@ -531,7 +531,7 @@ const GroupChatScreen = ({ route }) => {
         memberCount: groupChats[0].member_ids?.length || 0
       });
       setCurrentGroupChat(groupChats[0]);
-    } else {
+        } else {
       console.log('💬 GroupChatScreen: 🎯 No group to select (no route group, no group chats available)');
     }
     
@@ -588,7 +588,7 @@ const GroupChatScreen = ({ route }) => {
             const delay = (retryCount + 1) * 1000; // 1s, 2s, 3s
             console.log(`💬 GroupChatScreen: 📥 Retrying message load in ${delay}ms (attempt ${retryCount + 2}/4)`);
             setTimeout(() => loadWithRetry(retryCount + 1), delay);
-          } else {
+        } else {
             console.error('❌ GroupChatScreen: 📥 Max retries reached, giving up on message loading');
           }
         }
@@ -619,12 +619,12 @@ const GroupChatScreen = ({ route }) => {
           stack: subscriptionError.stack,
           groupId: currentGroupChat.id
         });
-      }
+        }
         
-      return () => {
+        return () => {
         console.log('💬 GroupChatScreen: 📥 Cleanup: Starting subscription cleanup for group:', currentGroupChat.id);
         
-        if (unsubscribe && typeof unsubscribe === 'function') {
+          if (unsubscribe && typeof unsubscribe === 'function') {
           try {
             console.log('💬 GroupChatScreen: 📥 Unsubscribing from group messages...');
             const cleanupStartTime = Date.now();
@@ -647,10 +647,10 @@ const GroupChatScreen = ({ route }) => {
             unsubscribeType: typeof unsubscribe
           });
         }
-      };
-    } else {
+        };
+      } else {
       console.log('💬 GroupChatScreen: 📥 No current group chat, skipping message loading');
-    }
+      }
   }, [currentGroupChat?.id, loadGroupMessages, setupGroupMessageSubscription]);
   
   // Set up real-time subscription for group chat updates (member changes)
@@ -732,7 +732,7 @@ const GroupChatScreen = ({ route }) => {
                   }
                   subscription = createSubscription();
                 }, delay);
-          } else {
+      } else {
                 console.log('💬 GroupChatScreen: 📡 Max retries reached for group updates subscription');
               }
             } else if (status === 'TIMED_OUT') {
@@ -1187,14 +1187,14 @@ const GroupChatScreen = ({ route }) => {
         {!isCurrentUser && sender && (
           <Text style={styles.senderName}>
             {sender.display_name || 'Unknown User'}
-          </Text>
+            </Text>
         )}
         <Text style={[
           styles.messageText, 
           !isCurrentUser && styles.theirMessageText
         ]}>
-          {item.text}
-        </Text>
+            {item.text}
+          </Text>
         <Text style={[
           styles.messageTimestamp, 
           !isCurrentUser && styles.theirMessageTimestamp
@@ -1213,8 +1213,8 @@ const GroupChatScreen = ({ route }) => {
               !isCurrentUser && styles.theirTimerText
             ]}>
               {item.timerSeconds}s
-            </Text>
-          </View>
+          </Text>
+        </View>
         )}
       </View>
     );
@@ -1283,7 +1283,7 @@ const GroupChatScreen = ({ route }) => {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading group chat...</Text>
-        </View>
+          </View>
       </SafeAreaView>
     );
   }
@@ -1297,14 +1297,14 @@ const GroupChatScreen = ({ route }) => {
             {(groupChats?.length || 0) === 0 
               ? "No group chats found.\nCreate your first group chat!" 
               : "Select a group chat to start messaging"}
-          </Text>
+            </Text>
           <TouchableOpacity 
             style={styles.createGroupButton}
             onPress={() => navigation.navigate('CreateGroupChat')}
           >
             <Text style={styles.createGroupButtonText}>Create Group Chat</Text>
           </TouchableOpacity>
-        </View>
+          </View>
       </SafeAreaView>
     );
   }
@@ -1352,11 +1352,11 @@ const GroupChatScreen = ({ route }) => {
       </View>
 
       {/* Messages List */}
-      <FlatList
-        ref={flatListRef}
+        <FlatList
+          ref={flatListRef}
         data={groupMessages || []}
-        renderItem={renderMessage}
-        keyExtractor={(item) => item.id.toString()}
+          renderItem={renderMessage}
+          keyExtractor={(item) => item.id.toString()}
         extraData={groupMessages?.length || 0} // Simplified extraData - only re-render when message count changes
         style={styles.messageList}
         contentContainerStyle={styles.messageListContent}
@@ -1376,15 +1376,15 @@ const GroupChatScreen = ({ route }) => {
             }, 100);
           }
         }}
-        ListEmptyComponent={
+          ListEmptyComponent={
           <View style={styles.emptyMessagesContainer}>
             <Ionicons name="chatbubble-outline" size={60} color={colors.text + '40'} />
             <Text style={styles.emptyMessagesText}>
               No messages yet. Start the conversation!
-            </Text>
-          </View>
-        }
-      />
+              </Text>
+            </View>
+          }
+        />
 
       {/* Message Input */}
       <KeyboardAvoidingView

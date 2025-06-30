@@ -619,7 +619,7 @@ export default function CameraScreen({ navigation, route }) {
   if (!permission) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FFFC00" />
+        <ActivityIndicator size="large" color="#E6C200" />
         <Text style={styles.loadingText}>Requesting Camera Permission...</Text>
       </View>
     );
@@ -629,7 +629,7 @@ export default function CameraScreen({ navigation, route }) {
   if (!permission.granted) {
     return (
       <View style={styles.permissionContainer}>
-        <Ionicons name="camera-outline" size={80} color="#FFFC00" />
+        <Ionicons name="camera-outline" size={80} color="#E6C200" />
         <Text style={styles.permissionTitle}>Camera Access Required</Text>
         <Text style={styles.permissionText}>
           To take photos and record videos, please enable camera access for this app.
@@ -783,7 +783,7 @@ export default function CameraScreen({ navigation, route }) {
         {/* Camera not ready overlay */}
         {!isReady && (
           <View style={styles.notReadyOverlay}>
-            <ActivityIndicator size="large" color="#FFFC00" />
+            <ActivityIndicator size="large" color="#E6C200" />
             <Text style={styles.notReadyText}>Preparing Camera...</Text>
           </View>
         )}
@@ -1210,7 +1210,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   permissionButton: {
-    backgroundColor: '#FFFC00',
+    backgroundColor: '#E6C200',
     paddingHorizontal: 30,
     paddingVertical: 15,
     borderRadius: 25,
@@ -1226,7 +1226,7 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   closeButtonText: {
-    color: '#FFFC00',
+                    color: '#E6C200',
     fontSize: 16,
   },
   camera: {
@@ -1319,7 +1319,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#FFFC00',
+    backgroundColor: '#E6C200',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 4,

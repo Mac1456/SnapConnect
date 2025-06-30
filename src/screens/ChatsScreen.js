@@ -29,7 +29,7 @@ export default function ChatsScreen({ navigation }) {
     colors: {
       background: '#000000',
       surface: '#1a1a1a',
-      primary: '#FFFC00',
+      primary: '#E6C200',
       text: '#ffffff',
       textSecondary: '#888888',
       border: '#333333',
@@ -38,7 +38,7 @@ export default function ChatsScreen({ navigation }) {
     colors: {
       background: '#ffffff',
       surface: '#f5f5f5',
-      primary: '#FFFC00',
+      primary: '#E6C200',
       text: '#000000',
       textSecondary: '#666666',
       border: '#e0e0e0',

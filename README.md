@@ -2,24 +2,31 @@
 
 **Share Moments. Disappear. Discover More.**
 
-A modern Snapchat clone built with React Native and Expo, featuring real-time messaging, ephemeral content, and designed for future AI-powered features.
+A modern Snapchat clone built with React Native and Expo, featuring real-time messaging, ephemeral content, and AI-powered activity suggestions.
 
 ## 🚀 Features
 
-### Core MVP Features
-- **User Authentication** - Sign up/login with Firebase Auth
-- **Camera Integration** - Photo/video capture with filters
-- **Ephemeral Messaging** - Disappearing snaps with customizable timers
-- **Stories** - 24-hour story sharing and viewing
-- **Friend System** - Add friends, manage connections
-- **Real-time Chat** - Live messaging and snap delivery
-- **Profile Management** - User profiles with stats and settings
+### ✅ Currently Implemented
+- **User Authentication** - Sign up/login with Supabase Auth
+- **Camera Integration** - Photo capture with real-time camera functionality
+- **Stories** - 24-hour story sharing and viewing with caption generation
+- **Friend System** - Add friends, manage connections, friend requests
+- **Real-time Chat** - One-on-one messaging with message history
+- **Group Chat** - Multi-user group messaging with AI activity suggestions
+- **Profile Management** - User profiles with photos, display names, and bio
+- **AI Activity Suggestions** - RAG-powered activity recommendations for group chats
+- **Onboarding System** - Guided tour for new users
+- **Theme Support** - Light/dark mode with consistent styling
+- **Responsive Design** - Optimized for various screen sizes
 
-### Coming Soon - AI Features
-- **Smart Caption Suggestions** - AI-generated captions based on group dynamics
-- **Activity Recommendations** - Personalized group activity suggestions
-- **Memory Prompts** - Story ideas based on shared experiences
-- **Event Reminders** - Intelligent notifications for friend milestones
+### 🎯 AI-Powered Features (Active)
+- **Activity Recommendations** - AI suggests group activities based on:
+  - User interests and past activities
+  - Friend relationships and shared experiences
+  - Recent messages and context
+  - Mood and activity type preferences
+- **RAG Integration** - Retrieval-Augmented Generation for personalized suggestions
+- **Context-Aware Suggestions** - Activities tailored to group dynamics
 
 ## 🛠 Tech Stack
 
@@ -27,20 +34,17 @@ A modern Snapchat clone built with React Native and Expo, featuring real-time me
 - **Navigation**: React Navigation
 - **Styling**: NativeWind (Tailwind CSS for React Native)
 - **State Management**: Zustand
-- **Backend**: Firebase (Auth, Firestore, Storage, Realtime Database)
-- **Media**: Expo Camera, AV
-- **Animations**: React Native Reanimated
-
-## 📱 Screenshots
-
-[Screenshots will be added here]
+- **Backend**: Supabase (Auth, Database, Storage, Edge Functions)
+- **AI**: OpenAI GPT-4 with RAG implementation
+- **Media**: Expo Camera, Image Picker
+- **Real-time**: Supabase Realtime subscriptions
 
 ## 🏗 Setup Instructions
 
 ### Prerequisites
 - Node.js (v16 or higher)
 - Expo CLI
-- Firebase Project
+- Supabase Project
 
 ### Installation
 
@@ -55,119 +59,128 @@ A modern Snapchat clone built with React Native and Expo, featuring real-time me
    npm install
    ```
 
-3. **Configure Firebase**
-   - Create a new Firebase project
-   - Enable Authentication, Firestore, Storage, and Realtime Database
-   - Copy your Firebase config to `firebase.config.js`
-   - Update the configuration object with your project details
+3. **Configure Supabase**
+   - Create a new Supabase project
+   - Copy your Supabase URL and anon key to `supabase.config.js`
+   - Run the database migrations from the `supabase-*.sql` files
+   - Deploy the Edge Functions from `supabase/functions/`
 
 4. **Start the development server**
    ```bash
-   npx expo start
+   npx expo start --dev-client
    ```
 
 5. **Run on device/simulator**
-   - For iOS: Press `i` or scan QR code with Expo Go
-   - For Android: Press `a` or scan QR code with Expo Go
+   - Scan QR code with Expo Go or development build
 
-## 🔧 Firebase Setup
+## 🗄 Database Schema
 
-### Required Firebase Services
-1. **Authentication** - Email/Password provider
-2. **Firestore Database** - Document storage for users, friends, etc.
-3. **Storage** - Media file storage for snaps and stories
-4. **Realtime Database** - Live messaging and presence
-
-### Firestore Collections Structure
-```
+### Supabase Tables
+```sql
 users/
-  - userId/
-    - username: string
-    - displayName: string
-    - email: string
-    - friends: array
-    - snapchatScore: number
-    - profilePicture: string
-    - bio: string
-    - createdAt: timestamp
+  - id: uuid (primary key)
+  - email: string
+  - username: string (unique)
+  - display_name: string
+  - profile_picture: string
+  - bio: string
+  - onboarding_completed: boolean
+  - created_at: timestamp
 
-snaps/
-  - snapId/
-    - senderId: string
-    - recipientId: string
-    - mediaUrl: string
-    - mediaType: 'image' | 'video'
-    - caption: string
-    - timer: number
-    - opened: boolean
-    - createdAt: timestamp
+friendships/
+  - user_id: uuid (foreign key)
+  - friend_id: uuid (foreign key)
+  - status: enum ('pending', 'accepted', 'blocked')
+  - created_at: timestamp
+
+messages/
+  - id: bigint (primary key)
+  - sender_id: uuid (foreign key)
+  - recipient_id: uuid (foreign key)
+  - content: text
+  - message_type: enum ('text', 'image', 'video')
+  - created_at: timestamp
+  - deleted_at: timestamp
+
+group_chats/
+  - id: uuid (primary key)
+  - name: string
+  - description: text
+  - creator_id: uuid (foreign key)
+  - member_ids: uuid[] (array)
+  - created_at: timestamp
 
 stories/
-  - storyId/
-    - userId: string
-    - mediaUrl: string
-    - mediaType: 'image' | 'video'
-    - caption: string
-    - views: array
-    - expiresAt: timestamp
-    - createdAt: timestamp
+  - id: uuid (primary key)
+  - user_id: uuid (foreign key)
+  - media_url: string
+  - media_type: enum ('image', 'video')
+  - caption: text
+  - views: uuid[] (array)
+  - created_at: timestamp
 ```
+
+## 🤖 AI Features Implementation
+
+### RAG System Architecture
+- **Edge Functions**: Supabase Edge Functions for AI processing
+- **Vector Embeddings**: User interests and activity data
+- **Context Retrieval**: Friend relationships, message history, past activities
+- **OpenAI Integration**: GPT-4 for natural language generation
+- **Fallback System**: Predefined suggestions when AI is unavailable
+
+### Activity Suggestion Categories
+- **Hangout** 🏠 - Casual indoor activities
+- **Adventure** 🗺️ - Outdoor and exploration activities  
+- **Creative** 🎨 - Arts, crafts, and creative projects
+- **Food** 🍕 - Dining and culinary experiences
+- **Entertainment** 🎬 - Movies, games, and entertainment
 
 ## 🎯 Target Audience
 
-**Social Connectors** - Users focused on sharing moments and maintaining friendships, specifically friend groups who want:
-- Fun, relevant captions for group photos
-- Personalized story prompts about hangouts
-- Activity recommendations based on shared interests
-- Intelligent reminders for group events
-- Content suggestions matching group humor and style
-
-## 🔮 Future RAG Implementation
-
-The app is architected to support RAG (Retrieval-Augmented Generation) features:
-
-### User Stories for AI Features
-1. **Smart Captions**: AI suggests fun, relevant captions for group photos based on shared memories and inside jokes
-2. **Story Prompts**: Personalized story ideas about recent hangouts or upcoming plans
-3. **Activity Suggestions**: Group activity recommendations based on past experiences and seasonal trends
-4. **Content Intelligence**: AI-generated suggestions aligned with group's favorite topics and humor style
-5. **Event Intelligence**: Smart reminders and post suggestions for friend group milestones
-6. **Discovery**: Recommendations for new content/events matching group sharing patterns
-
-### Technical Implementation Ready
-- User behavior tracking hooks in place
-- Content analysis preparation
-- Friendship graph data collection
-- Engagement pattern storage
-- Context-aware data structures
+**Social Connectors** - Friend groups who want intelligent activity suggestions and ephemeral content sharing with features like:
+- AI-powered activity recommendations for group hangouts
+- Context-aware suggestions based on group dynamics
+- Easy story sharing with smart caption generation
+- Real-time group messaging with activity planning
 
 ## 📝 Development Status
 
-### ✅ Completed (MVP)
-- User authentication and profiles
-- Camera functionality with basic filters
-- Real-time snap sharing
-- Ephemeral messaging system
-- Stories with 24-hour expiration
-- Friend management system
-- Chat interface
-- Profile management
+### ✅ Completed Features
+- User authentication and profile management
+- Camera functionality and story creation
+- Real-time one-on-one messaging
+- Group chat with member management
+- Friend system with requests
+- AI activity suggestion system with RAG
+- Onboarding flow for new users
+- Theme system with accessibility improvements
+- Profile picture upload and management
 
-### 🔄 In Progress
-- Advanced camera filters
-- Group messaging
-- Push notifications
-- Performance optimizations
+### 🔄 Current Limitations
+- Camera only supports photos (video recording not implemented)
+- Stories don't auto-expire after 24 hours
+- Push notifications not implemented
+- Advanced camera filters not available
+- Message reactions not implemented
 
-### 🎯 Planned (RAG Phase)
-- AI caption generation
-- Personalized content recommendations
-- Smart activity suggestions
-- Memory-based story prompts
-- Intelligent event reminders
-- Advanced content discovery
+### 🎯 Future Enhancements
+- Video recording and playback
+- Advanced camera filters and effects
+- Push notification system
+- Message reactions and replies
+- Story highlights and archives
+- Enhanced AI features (smart captions, memory prompts)
 
 ## 🚀 Deployment
+
+### Supabase Edge Functions
+```bash
+# Deploy AI functions
+npx supabase functions deploy activity-generator
+npx supabase functions deploy group-member-recommender
+npx supabase functions deploy group-details-recommender
+```
 
 ### Expo Deployment
 ```bash
@@ -179,37 +192,28 @@ npx expo build:ios
 npx expo publish
 ```
 
-### Firebase Hosting (Web)
-```bash
-npx expo export:web
-firebase deploy
-```
-
 ## 🧪 Testing
 
-```bash
-# Run tests
-npm test
-
-# Run linting
-npm run lint
-```
+The app includes test users for development:
+- **Alice Cooper**: `alice.cooper@test.com` / `password123`
+- **Bob Wilson**: `bob.wilson@test.com` / `password123`
+- **Charlie Brown**: `charlie.brown@test.com` / `password123`
 
 ## 📊 Performance Considerations
 
-- Image/video optimization for mobile
-- Efficient Firebase queries with pagination
-- Real-time listener management
-- Memory management for media content
-- Offline capability preparation
+- Optimized image handling with Expo Image Picker
+- Efficient Supabase queries with proper indexing
+- Real-time subscription management
+- Memory-conscious media handling
+- Responsive UI with proper loading states
 
 ## 🔐 Security & Privacy
 
-- Firebase Security Rules implemented
-- User data encryption
-- Media file access control
-- Privacy-focused design
-- GDPR compliance ready
+- Supabase Row Level Security (RLS) policies
+- Secure file upload to Supabase Storage
+- User data encryption at rest
+- Privacy-focused ephemeral messaging
+- Secure AI processing with Edge Functions
 
 ## 🤝 Contributing
 
@@ -225,15 +229,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 👥 Team
 
-- Developer: [Your Name]
+- Developer: Mustafa Chaudheri
 - Project Type: RAG-Enhanced Social Media Platform
-- Target: Social Connectors focusing on friend group interactions
-
-## 📞 Support
-
-For support and questions:
-- Create an issue in the repository
-- Contact: [your-email@example.com]
+- Focus: AI-powered social connections and activity recommendations
 
 ---
 

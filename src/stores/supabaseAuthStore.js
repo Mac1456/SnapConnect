@@ -269,6 +269,48 @@ export const useSupabaseAuthStore = create((set, get) => ({
     }
   },
 
+  // Mark onboarding as completed
+  completeOnboarding: async () => {
+    try {
+      const { user } = get();
+      if (!user) {
+        console.error('🟢 SupabaseAuthStore: No authenticated user for onboarding completion');
+        return { success: false, error: 'User not authenticated' };
+      }
+
+      console.log('🟢 SupabaseAuthStore: Marking onboarding as completed for user:', user.id);
+
+      const { data, error } = await supabase
+        .from('users')
+        .update({ 
+          onboarding_completed: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('🟢 SupabaseAuthStore: Error updating onboarding status:', error);
+        return { success: false, error: error.message };
+      }
+
+      // Update local user state
+      set({ 
+        user: { 
+          ...user, 
+          onboarding_completed: true 
+        } 
+      });
+
+      console.log('🟢 SupabaseAuthStore: Onboarding completed successfully');
+      return { success: true };
+    } catch (error) {
+      console.error('🟢 SupabaseAuthStore: Complete onboarding error:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
   // Update user profile
   updateProfile: async (userData) => {
     try {
@@ -287,24 +329,28 @@ export const useSupabaseAuthStore = create((set, get) => ({
       if (userData.profileImage && userData.profileImage.startsWith('file://')) {
         try {
           console.log('🟢 SupabaseAuthStore: Uploading profile image to storage');
+          console.log('🟢 SupabaseAuthStore: Original file URI:', userData.profileImage);
           
           const fileName = `profiles/${user.uid || user.id}/${Date.now()}.jpg`;
+          console.log('🟢 SupabaseAuthStore: Target file name:', fileName);
           
-          // Convert file URI to blob for upload
+          // Read file as base64 for React Native
           const response = await fetch(userData.profileImage);
-          const blob = await response.blob();
+          const arrayBuffer = await response.arrayBuffer();
+          const uint8Array = new Uint8Array(arrayBuffer);
           
-          console.log('🟢 SupabaseAuthStore: Profile image blob created, size:', blob.size);
+          console.log('🟢 SupabaseAuthStore: File converted to Uint8Array, size:', uint8Array.length);
           
           const { data: uploadData, error: uploadError } = await supabase.storage
             .from('media')
-            .upload(fileName, blob, {
+            .upload(fileName, uint8Array, {
               contentType: 'image/jpeg',
               upsert: true
             });
 
           if (uploadError) {
             console.error('🟢 SupabaseAuthStore: Profile image upload error:', uploadError);
+            console.error('🟢 SupabaseAuthStore: Upload error details:', JSON.stringify(uploadError, null, 2));
             throw uploadError;
           }
 
@@ -323,14 +369,20 @@ export const useSupabaseAuthStore = create((set, get) => ({
         }
       }
 
+      const updateData = {
+        display_name: userData.displayName,
+        bio: userData.bio,
+        updated_at: new Date().toISOString(),
+      };
+
+      // Only update profile_picture if we have a new one
+      if (profileImageUrl) {
+        updateData.profile_picture = profileImageUrl;
+      }
+
       const { error } = await supabase
         .from('users')
-        .update({
-          display_name: userData.displayName,
-          bio: userData.bio,
-          profile_picture: profileImageUrl,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updateData)
         .eq('id', user.uid || user.id);
 
       if (error) {
@@ -339,19 +391,41 @@ export const useSupabaseAuthStore = create((set, get) => ({
         return { success: false, error: error.message };
       }
 
-      // Update local state with the new data
+      // Fetch the updated user data from the database to ensure we have the latest
+      const { data: updatedUserData, error: fetchError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.uid || user.id)
+        .single();
+
+      if (fetchError) {
+        console.error('🟢 SupabaseAuthStore: Error fetching updated user data:', fetchError);
+        // Still update local state with what we have
+        const updatedUser = { 
+          ...user, 
+          display_name: userData.displayName,
+          displayName: userData.displayName, // Keep both for compatibility
+          bio: userData.bio,
+          profile_picture: profileImageUrl || user.profile_picture,
+          profilePicture: profileImageUrl || user.profilePicture, // Keep both for compatibility
+        };
+        
+        set({ user: updatedUser });
+        return { success: true, user: updatedUser };
+      }
+
+      // Update local state with fresh data from database
       const updatedUser = { 
         ...user, 
-        display_name: userData.displayName,
-        displayName: userData.displayName, // Keep both for compatibility
-        bio: userData.bio,
-        profile_picture: profileImageUrl,
-        profilePicture: profileImageUrl, // Keep both for compatibility
+        ...updatedUserData,
+        uid: user.uid || user.id, // Preserve uid field
+        displayName: updatedUserData.display_name, // Keep both for compatibility
+        profilePicture: updatedUserData.profile_picture, // Keep both for compatibility
       };
       
       set({ user: updatedUser });
       
-      console.log('🟢 SupabaseAuthStore: Profile updated successfully');
+      console.log('🟢 SupabaseAuthStore: Profile updated successfully with fresh data');
       return { success: true, user: updatedUser };
     } catch (error) {
       console.error('🟢 SupabaseAuthStore: updateProfile error:', error);

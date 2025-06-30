@@ -76,7 +76,7 @@ export default function AuthScreen() {
   return (
     <SafeAreaView className="flex-1">
       <LinearGradient
-        colors={['#FFFC00', '#FF6B9D', '#7B68EE']}
+        colors={['#E6C200', '#FF6B9D', '#7B68EE']}
         className="flex-1"
       >
         <KeyboardAvoidingView

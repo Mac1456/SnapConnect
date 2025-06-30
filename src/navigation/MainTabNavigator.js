@@ -21,7 +21,7 @@ const CustomTabButton = ({ children, onPress }) => (
       width: 65,
       height: 65,
       borderRadius: 32.5,
-      backgroundColor: '#FFFC00',
+      backgroundColor: '#E6C200',
       shadowColor: '#FF6B9D',
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.3,
@@ -76,7 +76,7 @@ export default function MainTabNavigator({ navigation }) {
         tabBarInactiveTintColor: '#FFFFFF80',
         tabBarStyle: {
           backgroundColor: '#FF6B9D',
-          borderTopColor: '#FFFC00',
+          borderTopColor: '#E6C200',
           borderTopWidth: 2,
           paddingBottom: Platform.OS === 'ios' ? 20 : 15,
           paddingTop: 10,

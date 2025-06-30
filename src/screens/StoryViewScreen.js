@@ -175,7 +175,7 @@ export default function StoryViewScreen({ navigation, route }) {
               navigation.goBack();
             }}
             style={{
-              backgroundColor: '#FFFC00',
+              backgroundColor: '#E6C200',
               paddingHorizontal: 20,
               paddingVertical: 10,
               borderRadius: 20,
@@ -416,7 +416,7 @@ export default function StoryViewScreen({ navigation, route }) {
               backgroundColor: 'rgba(0, 0, 0, 0.8)',
               zIndex: 5,
             }}>
-              <Ionicons name="hourglass" size={48} color="#FFFC00" />
+              <Ionicons name="hourglass" size={48} color="#E6C200" />
               <Text style={{ color: 'white', marginTop: 16, fontSize: 16 }}>Loading story...</Text>
               <Text style={{ color: '#ccc', marginTop: 8, fontSize: 12, textAlign: 'center', paddingHorizontal: 32 }}>
                 {currentStory.mediaUrl}
